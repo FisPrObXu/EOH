@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "eoh-thinsection"
+version = "0.1.0"
+description = "EOH (Eye of Heaven): conservative computer-assisted thin-section image assessment."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy>=1.23",
+  "pandas>=1.5",
+  "Pillow>=9.0",
+  "scikit-image>=0.20",
+  "matplotlib>=3.6",
+]
+
+[project.optional-dependencies]
+opencv = ["opencv-python>=4.8"]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+eoh-thinsection = "eoh_thinsection.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
