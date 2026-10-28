@@ -1,0 +1,47 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EOH — Eyes of heaven · 中文说明手册 · 0.4.1</title>
+<style>body{max-width:1000px;margin:36px auto;padding:0 22px;font:17px/1.85 "Microsoft YaHei",sans-serif;color:#263b49;background:#f6f8fa}article{background:#fff;border:1px solid #dbe4e9;padding:30px;border-radius:12px}h1,h2{color:#164c69;line-height:1.4}h1{font-size:31px}h2{font-size:23px;margin-top:35px}code{background:#edf3f6;padding:2px 6px;border-radius:4px}table{border-collapse:collapse;width:100%;font-size:15px}th,td{border:1px solid #cfdae1;padding:9px;text-align:left;vertical-align:top}th{background:#edf5f8}.note{padding:12px 18px;background:#eaf6f4;border-left:4px solid #168a83}a{color:#08729b}li{margin:8px 0}@media print{body{margin:0;background:#fff;font-size:11pt}article{border:0;padding:0}h2{break-after:avoid}tr{break-inside:avoid}}</style>
+<article><h1>EOH — Eyes of heaven</h1><p><b>中文说明手册 · 版本 0.4.1</b><br>BSE 图片颗粒审核、空间距离零假设检验与粒径统计。软件界面和新生成报告使用英文；本手册解释对应按钮及操作。</p>
+<div class="note">完整解压分发包后，进入 <code>EOH</code> 文件夹，双击 <code>EOH.exe</code>。保留同目录的 <code>_internal</code>，无需安装 Python、Conda 或 CUDA Toolkit。推荐解压到较短且有写入权限的路径，例如 <code>E:\EOH</code>。版本号仍为 0.4.1。</div>
+<h2>1．已有案例如何继续使用</h2><p>在主窗口 <b>Output case folder</b>（输出案例目录）旁点击 <b>Browse</b>，选择原来的“分析结果”文件夹。案例列表会读取其中的图片、审核版次和最新结果，不必重新导入。路径、图片名称、人工填写的备注保持原样。以前生成的中文报告保留；重新生成的报告使用英文。</p>
+<p>本项目源码版也可运行项目根目录的 <code>analyse_tool.cmd</code>。便携版首次运行会在 EXE 旁建立“工作数据”，保存应用设置、日志及缓存；输入图片和输出案例目录由您选择。</p>
+<h2>2．新图完整流程</h2><ol>
+<li><b>选路径。</b><b>Input image folder</b> 选择输入图片目录，<b>Output case folder</b> 选择输出目录。便携版可选择其他盘符；本项目源码版继续遵守 E 盘工作文件要求。</li>
+<li><b>导入。</b>点击 <b>1. Import image</b>；批量导入用 <b>Batch import</b>。同一输出目录内已导入的原图会保留已有案例，避免重复覆盖。</li>
+<li><b>裁切与定标。</b>在 <b>1. Crop</b> 模式拖框，去掉仪器文字栏／比例尺栏；切换 <b>2. Draw scale bar</b> 沿原图比例尺画线，填写真实长度，再点击 <b>Calibrate from drawn bar</b>。也可直接填写可靠的 <b>Native pixel size</b>（μm/pixel）。文件 DPI 不能当作显微标尺。</li>
+<li><b>设定参数。</b>在看结果前确定距离上限、步长、近距离阈值和粒径安全边界。默认粒径保护 1 μm；距离保护跟随距离上限，通常 5 μm。选 <b>Distance tests + grain sizes</b> 或 <b>Grain sizes only</b>。</li>
+<li><b>建立候选。</b>点击 <b>Create candidate outlines</b>，然后 <b>2. Open review</b> 打开本机浏览器审核页。</li>
+<li><b>审核并保存。</b>核对安全窗口、排除区、明暗类别与边界，点击 <b>Save all changes</b>，确认状态为 <b>Saved to project folder · Revision …</b>。</li>
+<li><b>出报告。</b>回到主窗口，勾选人工审核确认，点击 <b>3. Generate report</b>。结果按审核版次保存，旧结果保留。完成新的修改后需重新生成，已有图不会自动变更。</li></ol>
+<h2>3．审核网页操作</h2><table><tr><th>英文控件</th><th>作用</th></tr>
+<tr><td>Field / Class / Object</td><td>选择视野、明暗类别和对象；Previous／Next 切换对象。</td></tr>
+<tr><td>Add outline</td><td>补加漏检对象。先选择 Class，再沿真实边缘圈出。</td></tr>
+<tr><td>Redraw selected outline / Delete selected outline</td><td>重画／删除所选路径。删除后对象 ID 保留，可重画或 Undo 恢复。</td></tr>
+<tr><td>Drawing mode</td><td>Freehand：按住鼠标描边，松开闭合；Vertices：逐点点击，按 Enter 或 Finish outline 完成。</td></tr>
+<tr><td>Keep / Suggest exclusion / Uncertain</td><td>确认保留、建议排除、待确认；Save note 保存备注。</td></tr>
+<tr><td>Show W / Show outlines / Show unreadable regions</td><td>切换安全窗口、轮廓与不可判读区显示，不改变分析数据。</td></tr>
+<tr><td>Save all changes</td><td>保存所有已完成轮廓和有效操作，不仅是当前对象。有效的当前草稿会先尝试完成；不足三个点或面积过小则会提示。</td></tr></table>
+<p>蓝色为深灰候选、紫红为亮白候选、黄色表示当前选中、青绿表示正在绘制的草稿。已审核轮廓按类别着色。快捷键：Delete 删除，Enter 完成，Esc 取消，Ctrl+Z 撤销，Ctrl+S 保存全部。</p>
+<p>务必通过 EOH 的 <b>Open review</b> 打开 <code>http://127.0.0.1:…</code> 页面。直接打开本地 HTML 的 <code>file://</code> 模式不能写回项目。若提示保存冲突，保留当前页面，先解决冲突或用主窗口 <b>Restore review backup</b> 恢复完整备份。</p>
+<h2>4．孔洞、裂隙和不满意的排除区</h2><ol>
+<li><b>Hole: place point</b>：设置 <b>Exclusion radius</b>，在孔洞中心点一下；默认半径 1 μm，红色圆盘排除统计。</li>
+<li><b>Crack: draw line</b>：沿裂隙画开放线；默认半径 0.5 μm，为线两侧和端点增加同半径缓冲。总宽度约为两倍半径。</li>
+<li>在 <b>Existing exclusions</b> 选中已有区域，<b>Change selected radius</b> 改半径，或 <b>Delete selected exclusion</b> 删除。不满意的初始排除区也可在此选择删除。</li>
+<li>保存后红色排除区和橙色 W 更新；<b>Safe window</b> 可在 <b>Distance tests</b> 和 <b>Grain sizes</b> 之间切换。两种窗口的保护距离可不同。</li></ol>
+<p>粒径统计只纳入整个颗粒都在粒径窗口内的对象；跨界整粒排除。修改边框会改变像素面积、等效圆直径和纳入状态。距离统计按中心纳入，因此与粒径统计的粒数可以不同。</p>
+<h2>5．小亮颗粒识别</h2><p>导入时默认启用局部对比度增强；<b>Balanced</b> 为均衡，<b>Sensitive</b> 包含较弱小亮点，<b>Conservative</b> 减少杂点。<b>Standard / Tighter / Wider boundary</b> 控制边界范围。最低原生像素数默认 2。主窗口增强按钮会另存新案例并保留已保存手工修改；新候选仍需审核。</p>
+<h2>6．调整出图参数</h2><p>选择案例，点击 <b>Plot settings</b>。三个页签：</p><table>
+<tr><th>页签</th><th>主要设置</th></tr><tr><td>Distributions and curves</td><td>Binning：自动／组数／组宽；Bar width fraction：柱宽比例；Overlay a smooth distribution curve：密度曲线；Curve display：阶梯、折线、平滑；Random curves：展示曲线数量。</td></tr>
+<tr><td>Canvas and legend</td><td>画布宽高、坐标字号、留白、网格、图例位置、字号、字体、列数及边框。0 表示模板；字号自定义下限为 5 pt。</td></tr>
+<tr><td>Plotted objects</td><td>各类对象显隐、图例文字、颜色、线型和线宽。隐藏只影响图面，完整数据仍保留。</td></tr></table>
+<p>点击 <b>Save plot settings</b> 后重新生成／重绘报告。柱宽比例 1 表示相接，0.8 留 20% 间隙；组宽越大通常柱越粗、组数越少。折线与平滑只连接已有测量点，不增加信息、不改变 p 值。Random curves 为 1–4999，4999 展示全部；布局图只展示第 1 组，正式检验仍使用全部 4999 次模拟。</p>
+<h2>7．批量汇总与图形编辑</h2><p>在案例名称前打勾，点击 <b>Export batch summary</b>。汇总包括所选案例的空间分析与粒径两份报告、合并统计表和独立图件。<b>Summary plot settings</b> 控制汇总图；独立报告采用各自保存的 Plot settings。<b>Redraw latest summary</b> 使用已冻结分析数据更新显示。</p>
+<p>图件分别提供 PDF、SVG、600 dpi PNG/TIFF；可继续在矢量软件中编辑 PDF／SVG。tables 保存逐粒距离、面积、粒径、累计曲线及模拟结果；inputs 保存参数与来源，reviewed 保存原生标签，code 保存对应源码。备份时复制完整案例文件夹。</p>
+<h2>8．随机曲线和零假设怎样理解</h2><p><b>Observed</b> 是实测；<b>Evenly spread</b> 尽量均匀铺开，只作直观参照；<b>First random example</b> 展示第 1 次随机结果；浅蓝线表示多次随机布局。<b>Baseline</b> 是指定随机模型的正常水平；<b>Upper MC</b> 是同模型 95% 模拟参考上界，不是实测误差带。</p>
+<p>中心模型固定暗区与 W，随机放置同样数量的亮点中心；等面积模型还保留总面积，将面积均分为指定数量，满足单块 ≤ 原最大亮区 75% 的上限，整块位于 W 内、暗区外且不重叠。均匀铺开与随机不是同一种模型。曲线更早上升表示更多点在近距离内，但正式结论还需结合完整曲线、效应大小和匹配的随机检验。</p>
+<p>粒径采用二维等效圆直径 <code>d = √(4A/π)</code>，不是三维球径。亮暗分割本身不能独立鉴定矿物。颗粒数和模拟次数不等于独立样品数；合并报告的曲线为描述性结果。</p>
+<h2>9．GPU、小屏幕和错误日志</h2><p><b>Compute device</b> 可选 Auto (prefer GPU)、CPU only 或 Prefer GPU (CPU fallback)。NVIDIA CUDA GPU 加速均匀与等面积随机布局；缺少兼容设备时使用 CPU，操作系统仍需提供显卡驱动。批量任务复用 GPU。第一次运行有初始化成本，报告绘制等部分仍使用 CPU。</p>
+<p>主窗口和参数页支持上下、左右滚动，Shift＋滚轮左右移动。窗口按屏幕限高；主要对话框按钮固定在底部。计算时用 <b>Stop calculation</b> 请求停止；完成后可正常关闭窗口。</p>
+<p>启动错误在“工作数据/logs/startup_error.txt”，启动过程在 desktop_startup.log。案例错误在对应 logs，compute_backend.json 记录实际设备与回退信息。反馈时附版本、复现步骤和错误日志。</p>
+<h2>10．分发与许可</h2><p>这是 Windows x64 便携测试版，项目名称为 EOH，展开为 Eyes of heaven。EOH 采用 AGPL-3.0-only；源码及构建说明在 source、SOURCE.md 和 BUILDING.md，第三方组件保留各自许可，见 THIRD_PARTY_NOTICES.md 和 licenses。PyMuPDF/MuPDF 的 AGPL／商业双许可见<a href="https://pymupdf.readthedocs.io/en/latest/about.html#license-and-copyright">官方说明</a>。当前包未签名，转交其他电脑后应先用一张测试图验收。</p>
+</article></html>

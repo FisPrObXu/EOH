@@ -1,10 +1,9 @@
-# Technical References
+# EOH 0.4.1 references
 
-The implementation uses conservative, classical computer-vision methods inspired by openly documented tools and examples:
+- [PyMuPDF licensing](https://pymupdf.readthedocs.io/en/latest/about.html#license-and-copyright) and [PyMuPDF 1.26.4 source](https://github.com/pymupdf/PyMuPDF/tree/1.26.4).
+- [MuPDF 1.26.7 source](https://github.com/ArtifexSoftware/mupdf/tree/1.26.7).
+- [CuPy 13.6.0](https://github.com/cupy/cupy/tree/v13.6.0).
+- [PyInstaller 6.17.0](https://github.com/pyinstaller/pyinstaller/tree/v6.17.0).
+- [nature-figure audit scripts](https://github.com/Yuan1z0825/nature-skills/tree/main/skills/nature-figure/scripts), Apache-2.0.
 
-- scikit-image documentation for thresholding, morphology, connected-component measurements, ORB features, RANSAC models, and region properties: https://scikit-image.org/docs/stable/
-- OpenCV documentation for feature matching and homography concepts where OpenCV is available as an optional backend: https://docs.opencv.org/
-- Petrographic image segmentation examples using PPL/XPL imagery as a multi-image petrographic context: https://github.com/jbardelli/Petrographic-Image-Segmentation
-- Deep mineralogical segmentation work showing why final mineral classification should be training-data driven and validated, not asserted from a single heuristic pass: https://github.com/ltracegeo/deep-mineralogical-segmentation
-
-In this project these references are used for workflow design only. Mineral names remain conservative candidates unless confirmed by manual petrography and/or laboratory measurements.
+The complete component and source notices are in [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) and [SOURCE.md](../SOURCE.md). Original microscopy data and user review records are not published with EOH.

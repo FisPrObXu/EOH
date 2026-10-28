@@ -1,0 +1,10 @@
+# EOH 0.4.1 Windows source runtime; GPU acceleration is optional.
+numpy==1.26.4
+scipy==1.16.2
+pandas==2.3.3
+matplotlib==3.10.6
+Pillow==10.3.0
+scikit-image==0.23.2
+opencv-python==4.10.0.84
+PyMuPDF==1.26.4
+fonttools==4.53.0

@@ -1,0 +1,46 @@
+{
+  "product": "EOH",
+  "full_name": "Eyes of heaven",
+  "version": "0.4.1",
+  "verified_at": "2026-10-28T10:02:39.923206",
+  "english_interface": {
+    "all_runtime_text_english_except_existing_storage_names_and_manual_path": true,
+    "computation_structure_unchanged_only_text_translated": true,
+    "english_desktop_and_four_dialog_types_at_three_scales": true,
+    "main_action_buttons_inside_760x500_dialogs": true,
+    "separate_chinese_manual_matches_english_controls": true,
+    "windows_file_error_display_uses_english": true,
+    "import_succeeds_when_windows_denies_directory_rename": true
+  },
+  "browser_review": {
+    "actual_review_page_controls_and_status_english": true,
+    "english_add_outline_and_save_persist_native_record": true,
+    "english_hole_buffer_preview_and_save_work": true
+  },
+  "standalone": {
+    "exe_import_and_unicode_worker_protocol": true,
+    "exe_review_server_opens_and_saves_annotations": true,
+    "new_spatial_and_grain_reports_are_english": true,
+    "standalone_cuda_full_report_matches_cpu_reference": true,
+    "batch_uses_one_process_and_one_gpu_context": true,
+    "standalone_cpu_full_report_without_cuda": true
+  },
+  "numerical_and_ui": {
+    "cuda_uniform_layouts_exact_with_cpu_including_ties": true,
+    "cuda_4999_placements_and_variants_exact_with_cpu": true,
+    "cpu_selection_works": true,
+    "missing_gpu_uses_cpu_path": true,
+    "900x500_and_three_font_scales_keep_dialog_buttons_reachable": true,
+    "real_case_distances_curves_p_values_all_simulations_and_sizes_unchanged": true,
+    "real_report_used_cuda_without_fallback": true
+  },
+  "packaged_gui_and_three_dialogs_without_python_path": true,
+  "benchmark": {
+    "cpu_seconds": 111.65213609999046,
+    "warm_gpu_seconds": 38.666405999916606,
+    "speedup": 2.8875747102079066,
+    "hardware": "NVIDIA GeForce RTX 4060 Laptop GPU",
+    "note": "One real case on the development computer; not an independent-machine acceptance test."
+  },
+  "no_private_images_reviews_or_reports": true
+}

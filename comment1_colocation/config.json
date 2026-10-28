@@ -1,0 +1,70 @@
+{
+  "parameter_version": "candidate-v1-frozen-before-statistics",
+  "backend": "python",
+  "phase_identity_validated": false,
+  "segmentation_reviewed": false,
+  "independent_replicates_validated": false,
+  "sample_identity": "unknown",
+  "input_directory": "../FIGURES",
+  "images": {},
+  "segmentation": {
+    "void_threshold": 75,
+    "void_halo_um": 0.3,
+    "smooth_sigma_px": 0.8,
+    "background_sigma_um": 2.5,
+    "gray_residual": 9,
+    "gray_min_area_um2": 0.15,
+    "gray_max_axis_ratio": 3.0,
+    "gray_min_solidity": 0.65,
+    "bright_threshold": 235,
+    "bright_min_area_um2": 0.015,
+    "bright_min_pixels": 3,
+    "area_measurable_pixels": 9,
+    "crack_intensity": 125
+  },
+  "statistics": {
+    "B": 4999,
+    "alpha": 0.05,
+    "critical_order_one_based": 4750,
+    "seed_base": 2026102500,
+    "rmax_um": 5.0,
+    "grid_step_um": 0.25,
+    "effect_distances_um": [
+      0,
+      0.5,
+      1,
+      2,
+      5
+    ],
+    "rounding": "floor(centroid_pixel_index + 0.5), native pixel center grid",
+    "denominator": "all N centroids in W, including distances > rmax",
+    "rmax_rationale": "5 um fits field sizes; erosion of A protects unknown boundaries and black void context; 0.25 um grid exceeds coarsest pixel spacing 0.1126 um. Fixed before computing any CDF or p."
+  },
+  "sensitivity": {
+    "boundary_pixels": [
+      -1,
+      1
+    ],
+    "gray_residual_strict": 12,
+    "bright_thresholds": [
+      225,
+      245
+    ],
+    "bright_min_area_strict_um2": 0.05,
+    "extra_unknown_halo_um": 1.0,
+    "rationale": "One-pixel target boundary perturbation is a numerical probe, not a validated error interval. Residual thresholds 9/12 span visibly diffuse dark margins. Bright thresholds 225/235/245 bracket unsaturated to saturated cores. 0.05 um2 probes very small unresolved objects. A further 1 um erosion checks the prominent unknown void/fracture context. No thresholds selected using p."
+  },
+  "deduplication": {
+    "priority": [
+      "24",
+      "25",
+      "26"
+    ],
+    "this_round_pooling": false
+  },
+  "figure": {
+    "width_mm": 180,
+    "png_dpi": 600,
+    "font": "DejaVu Sans"
+  }
+}

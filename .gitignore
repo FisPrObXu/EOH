@@ -14,3 +14,13 @@ dist/
 # Remove these lines if you intentionally want to version raw images/results.
 JBXu_TS/
 thinsection_assessment_outputs/
+
+# EOH analysis inputs, case data, build products, and runtime caches.
+FIGURES/
+分析结果/
+comment1_colocation/logs/
+comment1_colocation/_tmp/
+comment1_colocation/cache/
+comment1_colocation/self_service_cases/
+releases/
+工作数据/
