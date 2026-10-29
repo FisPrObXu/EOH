@@ -52,7 +52,7 @@ def main(argv: list[str] | None = None) -> int:
     print("top_findings:")
     for finding in summary.top_findings[:5]:
         print(f"- {finding}")
-    print("top_limitations:")
+    print("analysis_context:")
     for limitation in summary.top_limitations[:5]:
         print(f"- {limitation}")
     print("top_followups:")

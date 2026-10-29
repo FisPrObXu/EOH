@@ -12,7 +12,7 @@ def analysis_feasibility_rows() -> list[dict[str, str]]:
             "required_inputs": "Visible red scale bar and readable or inferable label",
             "recommended_method": "Lower-right red-overlay geometry detection; manual endpoint verification",
             "expected_outputs": "scale_bar_measurements.csv; QC crop with detected bbox",
-            "limitations": "OCR is not performed; filename label inference can be wrong if exported metadata changes",
+            "limitations": "Scale labels use filename and overlay information; verify the detected label.",
             "follow_up": "Verify label and endpoints before publication-scale measurements",
         },
         {
@@ -36,7 +36,7 @@ def analysis_feasibility_rows() -> list[dict[str, str]]:
             "required_inputs": "PPL/XPL or reflected-light image",
             "recommended_method": "Gray thresholding, morphology, connected components",
             "expected_outputs": "dark_domain_stats.csv and image-level dark fractions",
-            "limitations": "Cannot identify pyrite, oxide, pore, resin, or shadow from transmitted light alone",
+            "limitations": "Identify dark-domain classes with reflected light or SEM-BSE/EDS.",
             "follow_up": "Reflected light plus SEM-BSE/EDS",
         },
         {
@@ -72,7 +72,7 @@ def analysis_feasibility_rows() -> list[dict[str, str]]:
             "required_inputs": "PPL/XPL pairs and training polygons",
             "recommended_method": "Texture/color features plus human annotation dataset",
             "expected_outputs": "candidate domain maps",
-            "limitations": "No final domain labels without expert review",
+            "limitations": "Expert review supplies final domain labels.",
             "follow_up": "Build manual annotation training set",
         },
         {
@@ -84,7 +84,7 @@ def analysis_feasibility_rows() -> list[dict[str, str]]:
             "required_inputs": "PPL/XPL pairs, shape filters, expert review",
             "recommended_method": "Elongated polygon extraction and paired-image review",
             "expected_outputs": "candidate feldspar-shaped target list",
-            "limitations": "Cannot determine relict plagioclase versus pseudomorph alone",
+            "limitations": "Use BSE/EDS or EPMA to distinguish relict plagioclase and pseudomorphs.",
             "follow_up": "BSE/EDS or EPMA confirmation",
         },
         {
@@ -108,7 +108,7 @@ def analysis_feasibility_rows() -> list[dict[str, str]]:
             "required_inputs": "Images and domain candidates",
             "recommended_method": "Generate overview pages and target IDs",
             "expected_outputs": "annotated overview sheets",
-            "limitations": "IDs are navigation aids, not interpretations",
+            "limitations": "IDs identify domains for navigation and review.",
             "follow_up": "Expert polygon annotation",
         },
         {
@@ -144,7 +144,7 @@ def analysis_feasibility_rows() -> list[dict[str, str]]:
             "required_inputs": "Candidate phenomena and safe rule set",
             "recommended_method": "Rule-based recommendations with confidence tags",
             "expected_outputs": "phenomenon_followup.csv",
-            "limitations": "Recommendations depend on candidate observations, not confirmed phases",
+            "limitations": "Recommendations use candidate observations and expert phase identification.",
             "follow_up": "Expert prioritization before lab work",
         },
     ]
@@ -190,7 +190,7 @@ def impossible_or_not_recommended_rows() -> list[dict[str, str]]:
         },
         {
             "claim_or_task": "Determine sulfur, strontium, oxygen, or other isotope compositions",
-            "reason_not_possible_from_images": "Isotope ratios are not encoded in visible image texture",
+            "reason_not_possible_from_images": "Isotope ratios are measured using dedicated isotope methods.",
             "minimum_required_additional_data": "SIMS, LA-MC-ICP-MS, TIMS/MC-ICP-MS, or appropriate isotope lab method",
             "safe_wording": "isotope analysis recommended for confirmed phase generation",
         },
@@ -223,7 +223,7 @@ def phenomenon_followup_rows() -> list[dict[str, str]]:
             "Possible feldspar-shaped domain or pseudomorph",
             "EPMA for Na-Ca-K-Al-Si if uniform extinction is confirmed; BSE-EDS if cloudy or replacement texture is present",
             "High",
-            "Cannot calculate An-Ab-Or or prove relict plagioclase from static images alone",
+            "Measure An-Ab-Or composition with chemical analysis and review relict textures.",
         ),
         (
             "opaque grains or possible pyrite",
@@ -231,7 +231,7 @@ def phenomenon_followup_rows() -> list[dict[str, str]]:
             "Opaque mineral, pore, resin, crack, or shadow candidate",
             "Reflected-light petrography plus SEM-BSE/EDS; EPMA or LA-ICP-MS only after sulfide identity is confirmed",
             "High",
-            "Cannot call pyrite or distinguish sulfide/oxide/pore/resin from transmitted images alone",
+            "Use reflected light and SEM-BSE/EDS to classify sulfide, oxide, pore and resin domains.",
         ),
         (
             "quartz or silicified vein/matrix candidate",
@@ -239,7 +239,7 @@ def phenomenon_followup_rows() -> list[dict[str, str]]:
             "Possible silica-rich or low-birefringence domain",
             "SEM-CL for quartz generations; Raman/XRD or BSE-EDS for phase confirmation",
             "Medium",
-            "Cannot confirm quartz generation or fluid history from image texture alone",
+            "Use texture, chemistry and chronology to investigate quartz generations and fluid history.",
         ),
         (
             "sulfate-like phase candidate",
@@ -247,7 +247,7 @@ def phenomenon_followup_rows() -> list[dict[str, str]]:
             "Possible anhydrite, gypsum, barite, alunite-group, or other sulfate-like phase",
             "BSE-EDS for Ca-S/Ba-S/Sr-Ba-Ca; Raman/XRD; S-O-Sr isotopes only after phase confirmation",
             "Medium",
-            "Cannot distinguish sulfate species or isotope signature from images alone",
+            "Use mineralogical and isotope analyses to distinguish sulfate species and signatures.",
         ),
         (
             "clay-like aggregate",
@@ -255,7 +255,7 @@ def phenomenon_followup_rows() -> list[dict[str, str]]:
             "Possible chlorite/illite/smectite-like alteration aggregate",
             "XRD with oriented clay treatment; SEM-EDS Mg-Fe-Al-Si; Raman where appropriate",
             "Medium",
-            "Cannot distinguish clay species from image appearance alone",
+            "Use diffraction or spectroscopy to identify clay species.",
         ),
         (
             "pores, fractures, or multi-stage veins",
@@ -263,7 +263,7 @@ def phenomenon_followup_rows() -> list[dict[str, str]]:
             "Possible open space, fracture, or crosscutting texture",
             "Manual paragenesis map, BSE/EDS relationship map, SEM-CL/fluid-inclusion study if quartz or vug linings are confirmed",
             "High",
-            "Cannot prove sequence, primary/secondary inclusions, or switching timescale from current images alone",
+            "Combine texture mapping, fluid-inclusion petrography and chronology to investigate sequence and timescales.",
         ),
     ]
     rows = []

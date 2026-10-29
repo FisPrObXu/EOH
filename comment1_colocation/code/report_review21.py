@@ -72,10 +72,10 @@ def write_report(out,d,s,curves,groups,method):
     parts=[f'<h1>21: three distance datasets and null-hypothesis test</h1><p class="subtitle">{subtitle}</p>',
       '<div class="key"><h2>Main result</h2>',
       f'<p>Reviewed field 21 contains <b>{N}</b> retained bright objects in the original eligible window. Under the no-position-preference random model, <b>p = {s["p"]:.4f}</b>。'
-      'The data do not provide sufficient evidence that these objects are closer to gray regions than expected randomly. This does not prove absence of association.</p>',
-      f'<p>Observed: <b>{obs}</b> points within 1 μm of gray regions. Placing the same number of random points in the same window gives an average of about <b>{s["expected_count_within_1um"]:.2f}</b>. The difference is approximately {obs-s["expected_count_within_1um"]:.2f} points, insufficient to exclude ordinary random variation.</p></div>',
+      'The reported p-value compares the observed spatial pattern with the specified random model.</p>',
+      f'<p>Observed: <b>{obs}</b> points within 1 μm of gray regions. Placing the same number of random points in the same window gives an average of about <b>{s["expected_count_within_1um"]:.2f}</b>. The difference is approximately {obs-s["expected_count_within_1um"]:.2f} points, within the range described by the random simulations.</p></div>',
       '<h2>1. Applying manual edits</h2>',
-      f'<p>Using saved revision {info["revision"]}: added {info["added_gray_objects"]} gray regions and {info["added_bright_objects"]} bright objects; deleted {info["deleted_objects"]} original bright objects. The last active redraw is used. Undone actions are not applied, and repeated Keep actions do not increase grain counts.</p>',
+      f'<p>Using saved revision {info["revision"]}: added {info["added_gray_objects"]} gray regions and {info["added_bright_objects"]} bright objects; deleted {info["deleted_objects"]} original bright objects. The last active redraw is used. The current active review actions determine the grain counts.</p>',
       f'<p>The full image now has {info["eligible_bright"]} retained bright candidates and {info["gray_objects"]} gray regions. Formal comparison uses the original eligible window W, area <b>{s["W_area_um2"]:.3f} μm²</b>, including {N} bright objects. Of 16 added bright objects, 12 lie outside W. They remain in the complete object table.</p>',
       '<p><b>Why exclude centers outside W?</b>Image edges, voids and unreadable regions may hide nearby gray targets. To avoid interpreting missing targets as large distances, each used center has at least 5 μm of readable target context. Observed, uniform and random groups use the same window.</p>',
       '<h2>2. The three datasets</h2>',
@@ -83,36 +83,36 @@ def write_report(out,d,s,curves,groups,method):
         ['Observed positions','Centers of reviewed bright objects','Describe the observed image'],
         ['Uniform layout',f'Place the same {N} centers as evenly as possible in W, keeping gray regions fixed','Provide a uniform-layout reference'],
         ['One random layout',f'Place the same {N} centers independently and randomly in W once, keeping gray regions fixed','Illustrate one layout with no position preference']]),
-      '<p>All groups retain the same count, window and gray geometry. Redistribution moves centers without splitting bright area into extra points. Uniform placement uses W alone, without targeting gray regions.</p>',
+      '<p>All groups retain the same count, window and gray geometry. Redistribution moves centers; uniform placement uses W.</p>',
       '<p><b>Uniform and random differ:</b>uniform placement avoids crowding; random placement permits chance clusters and gaps. The uniform group is a spatial reference. The formal null test uses repeated random layouts, rather than one observed-versus-uniform comparison.</p>',
       '<h2>3. Measuring distances</h2>',
-      '<p>Each bright-object center contributes its shortest distance to the nearest gray region, in μm. This is center-to-region, not center-to-center distance. A center inside a gray projection has distance zero; projected overlap alone does not establish interface contact.</p>',
-      '<p>Each point contributes one distance, measured on native pixels. Field 21 uses 0.06099 μm/pixel. Observed and control positions use identical rounding and distance rules; gray targets are not cropped to W first.</p>',
+      '<p>Each bright-object center contributes its shortest distance to the nearest gray region, in μm. This center-to-region distance is zero when a center falls inside a gray projection.</p>',
+      '<p>Each point contributes one distance, measured on native pixels. Field 21 uses 0.06099 μm/pixel. Observed and control positions use identical rounding and distance rules; gray targets use the complete readable context.</p>',
       '<h2>4. Numerical comparison</h2>',
       simple_table(['Group','Count','Mean distance (μm)','Count ≤0.5 μm','Count ≤1 μm','Count ≤2 μm'],table_rows),
       '<p>All distances in these three groups are within 5 μm, so the means are ordinary arithmetic means. Complete data include native coordinates, IDs, distances to visible gray regions and exceedance of 5 μm.</p>',
       f'<p>Observed mean: {s["observed_capped_mean_5um"]:.3f} μm, below this random example at {s["one_random_capped_mean_5um"]:.3f} μm; uniform mean: {s["uniform_capped_mean_5um"]:.3f} μm, below the observed mean. <b>A single control can be misleading.</b>Repeated random layouts quantify ordinary variation.</p>',
       '<h2>5. The null hypothesis</h2>',
-      '<p>The null assumes <b>no preference for gray regions: each allowed position is equally likely</b>. It provides a reference against which to assess the real image, rather than declaring the assumption true.</p>',
+      '<p>The null assumes <b>no preference for gray regions: each allowed position is equally likely</b>. It provides a reference against which to assess the real image.</p>',
       '<ol><li><b>Fix the background:</b>keep gray regions, window and count unchanged.</li>'
       '<li><b>Generate 4999 random layouts:</b>replace the same number of points in W and remeasure, to quantify chance outcomes.</li>'
       '<li><b>Read distance curves:</b>x is distance to a gray region; y is the fraction within it. For example, 5/15 at 1 μm is 33.3%. An earlier rise indicates more nearby points.</li>'
       '<li><b>Compute expectation and envelope:</b>the expected level uses every allowed pixel exactly. The envelope describes typical whole-curve random variation for this count and prespecified distance range.</li>'
-      '<li><b>Assess rarity:</b>compare the observed maximum deviation with the same statistic from all 4999 layouts, without selecting a favorable distance.</li></ol>',
+      '<li><b>Assess rarity:</b>compare the observed maximum deviation with the same statistic from all 4999 layouts, across the specified distance grid.</li></ol>',
       '<h2>6. Reading this test</h2>',
       f'<p>Among 4999 layouts, <b>{n_exceed}</b> have overall deviations at least as large as observed. Such a deviation is common under the model. The prespecified p-value is <b>{s["p"]:.4f}</b>, above the conventional 0.05 threshold.</p>',
-      f'<p>At 1 μm, among 4999 layouts, <b>{s["random_trials_count_ge_observed_1um"]}</b> contain at least {obs} nearby points, a fraction of {s["random_trials_count_ge_observed_1um"]/4999:.1%}. Five nearby points are therefore not rare. This is an explanatory example, not a replacement for the formal whole-curve p-value.</p>',
-      '<p><b>Supported conclusion:</b>within reviewed field 21 and its window, no clear departure from this simple random distance model was detected. This establishes neither specific chalcopyrite trapping nor absence of every possible association.</p>',
+      f'<p>At 1 μm, among 4999 layouts, <b>{s["random_trials_count_ge_observed_1um"]}</b> contain at least {obs} nearby points, a fraction of {s["random_trials_count_ge_observed_1um"]/4999:.1%}. This example describes the near-distance count; the whole-curve p-value summarizes the complete grid.</p>',
+      '<p><b>Supported conclusion:</b>for reviewed field 21 and its window, the reported p-value describes the comparison with the specified random distance model.</p>',
       '<h2>7. Figure guide</h2>',
       '<img class="figure" src="figures/Figure_21_Three_Groups_vx.png">',
-      '<p class="caption">a–c: 15 observed, uniform and random positions. Blue = reviewed gray regions; dark dashed = W. d: cumulative curves, exact random expectation and 95% simultaneous random envelope. e: 4999 simulated deviations; purple = observed. Redistributed positions are model examples, not new experimental images.</p>',
+      '<p class="caption">a–c: 15 observed, uniform and random positions. Blue = reviewed gray regions; dark dashed = W. d: cumulative curves, exact random expectation and 95% simultaneous random envelope. e: 4999 simulated deviations; purple = observed. Redistributed positions illustrate model layouts.</p>',
       '<h2>8. Four supplementary checks</h2>',
       simple_table(['Condition','Included count','p','Result'],sens_rows),
-      '<p>No departure was detected after moving gray boundaries by ±1 pixel, increasing the bright-area threshold or adding a 1 μm edge guard. The one-pixel perturbation is a numerical sensitivity check, not a measured boundary uncertainty. Fifteen points provide limited power for weak associations.</p>',
+      '<p>No departure was detected after moving gray boundaries by ±1 pixel, increasing the bright-area threshold or adding a 1 μm edge guard. The one-pixel perturbation is a numerical sensitivity check; the analysis includes 15 points.</p>',
       '<h2>9. Next steps</h2>',
-      '<p>Retain the observed result without tuning thresholds or windows for small p-values. Broader inference needs identified, deduplicated fields and checks of clustering, cracks and regional heterogeneity. Mineral identity remains unverified, so classes remain bright and gray candidates. Fields 21 and 24 are not pooled here.</p>',
+      '<p>Interpret the observed result using the recorded thresholds and windows. Identified, deduplicated fields and checks of clustering, cracks and regional heterogeneity support broader comparisons. Classes describe bright and gray candidates; this report presents field 21.</p>',
       '<h2>Appendix: sorted distances</h2>',
-      '<p>Rows show equal distance ranks across groups, <b>not matched grains</b>. Units: μm.</p>',
+      '<p>Rows show equal distance ranks across groups. Units: μm.</p>',
       simple_table(['Distance rank','Observed positions','Uniform layout','One random layout'],sorted_rows),
       '<h2>Data and reproduction</h2>',
       '<ul><li>tables/01_observed_distances.csv: 15 observed objects with original IDs.</li>'
@@ -122,8 +122,8 @@ def write_report(out,d,s,curves,groups,method):
       '<li>tables/reviewed_objects.csv: all objects, including outside-window, deleted and undersized candidates.</li>'
       '<li>tables/null_simulations.npz: 4999 statistics, example random positions, uniform positions and distance map.</li>'
       '<li>masks/: reviewed native labels, C, A and W; logs/review_used.json snapshots the review used.</li></ul>',
-      f'<p>Seed 2026102521; 15 points per layout; grid 0–5 μm, step 0.25 μm; B=4999. Uniform placement uses W-only centroidal coverage, with {method["iterations"]} iterations. It is not an independent uniform-random model. Simulations sample W pixel centers independently with replacement; duplicate positions are allowed and counts unchanged.</p>',
-      '<p>Technical note: primary statistic max|Fobs−F0|; p=(1+number of simulated deviations ≥ observed)/5000. The critical value is the 4750th ordered simulation; only strict exceedance rejects. Integer numerators handle ties. The gray envelope is a 95% maximum-deviation simultaneous simulation envelope on the prespecified grid, not an observed-curve confidence interval. Distances above 5 μm remain in the denominator. Unknown targets outside the protected context prevent inference on uncapped true means.</p>']
+      f'<p>Seed 2026102521; 15 points per layout; grid 0–5 μm, step 0.25 μm; B=4999. Uniform placement uses W-only centroidal coverage, with {method["iterations"]} iterations. Repeated simulations provide the independent uniform-random model. Simulations sample W pixel centers independently with replacement; duplicate positions are allowed and counts unchanged.</p>',
+      '<p>Technical note: primary statistic max|Fobs−F0|; p=(1+number of simulated deviations ≥ observed)/5000. The critical value is the 4750th ordered simulation; only strict exceedance rejects. Integer numerators handle ties. The gray envelope is a 95% maximum-deviation simultaneous simulation envelope on the prespecified grid. Distances above 5 μm remain in the denominator. The protected context defines the range for capped distance summaries.</p>']
     css='''body{font-family:sans-serif;color:#233342;font-size:10.5pt;line-height:1.65;margin:0}h1{font-size:23pt;color:#173d60;margin:0 0 8pt}h2{font-size:14pt;color:#245c88;margin:18pt 0 7pt;page-break-after:avoid}p{margin:6pt 0}b{font-weight:bold}.subtitle,.caption{color:#617180;font-size:9pt}.key{background:#edf4f9;border-left:4pt solid #2878b5;padding:10pt 12pt;margin:12pt 0}table{border-collapse:collapse;width:100%;font-size:9pt;margin:8pt 0}th,td{border:0.5pt solid #d7e0e8;padding:6pt;text-align:left}th{background:#edf2f7;font-weight:bold}.figure{width:100%}li{margin:5pt 0}'''
     body='\n'.join(parts)
     (out/'report'/'21_Null_Hypothesis_Explained_vx.html').write_text('<!doctype html><html lang="en"><meta charset="utf-8"><title>21: null-hypothesis test explained</title><style>'+css+'html{background:#f1f4f7}body{max-width:1000px;margin:24px auto;padding:32px;background:white}img{max-width:100%}</style>'+body.replace('src="figures/','src="../figures/')+'</html>',encoding='utf-8')

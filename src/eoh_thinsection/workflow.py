@@ -148,10 +148,10 @@ def run_workflow(
     ]
     top_limitations = [
         "Scale labels are inferred from visible labels/filename magnification rules and should be verified before publication-scale measurements.",
-        "Opaque/dark domains are not automatically identified as pyrite, oxides, pores, or resin.",
-        "PPL/XPL registration results are QC candidates, not final aligned products.",
+        "Use reflected-light or BSE/EDS analysis to classify opaque and dark domains.",
+        "PPL/XPL registration produces candidate alignments for QC.",
         "Mineral species, clay types, sulfate species, and feldspar composition require follow-up analysis.",
-        "Fluid-source switching and event timing cannot be demonstrated from images alone.",
+        "Combine textures, isotope analyses and chronology to investigate fluid-source switching and timing.",
     ]
     top_followups = [
         "Manual petrographic review of candidate domains and scale-bar calibrations.",
@@ -282,8 +282,8 @@ def _write_tables(
 def _feature_warning(likely_mode: str) -> str:
     if likely_mode == "XPL":
         return (
-            "XPL images often have dark backgrounds; dark_fraction is not a direct "
-            "opaque/pore percentage. Use paired PPL/reflected/BSE review."
+            "XPL dark_fraction describes image darkness; use paired "
+            "PPL, reflected-light or BSE views for class review."
         )
     return (
         "Candidate image features only; dark domains may include opaque minerals, pores, "
@@ -360,7 +360,7 @@ def build_report(
 
 This EOH (Eye of Heaven) workflow scanned the current thin-section image directory and generated conservative image-analysis support outputs. The images can support metadata organization, PPL/XPL filename pairing, visible red scale-bar detection, QC review, thumbnail and basemap generation, dark-domain candidate statistics, and preliminary target selection for manual petrography and follow-up laboratory work.
 
-The workflow does not confirm mineral identities. It reports image-derived candidates only. Current images can assist clast-matrix-vein-vug-pseudomorph mapping and preliminary microtextural review, but final mineral identification, mineral chemistry, isotope values, and fluid-source switching interpretations require manual and laboratory confirmation.
+The workflow reports image-derived candidates for clast-matrix-vein-vug-pseudomorph mapping and microtextural review. Mineral identification, chemistry, isotope values and fluid-source interpretation use petrographic and laboratory observations.
 
 Most recommended next step: manually review the scale-bar QC crops and candidate domains, then choose a small set of representative fields for reflected-light microscopy, SEM-BSE/EDS, EPMA, Raman/XRD, SEM-CL, SIMS sulfur isotope work, Sr isotope work, and fluid-inclusion analysis as appropriate.
 
@@ -373,11 +373,11 @@ Most recommended next step: manually review the scale-bar QC crops and candidate
 - Registration QC good candidates: {registration_good}
 - Mean dark-domain candidate area fraction: {mean_dark:.4f}
 
-Scale-bar detection now uses a lower-right red-overlay detector constrained by color, geometry, position, and high aspect ratio. It also infers expected scale labels from the observed magnification tokens in filenames where available. These values are suitable for navigation and preliminary measurement, but publication-scale quantitative work should verify the printed label and bar endpoints manually.
+Scale-bar detection now uses a lower-right red-overlay detector constrained by color, geometry, position, and high aspect ratio. It also infers expected scale labels from the observed magnification tokens in filenames where available. Use the measured scale-bar label and endpoints for navigation and quantitative calibration.
 
-Dark-domain statistics are most useful in PPL or reflected-light images. XPL fields may have a naturally dark background, so XPL dark fractions should not be interpreted as opaque-mineral, pore, or resin percentages.
+Dark-domain statistics describe image darkness in PPL, reflected-light and XPL views; paired-image review supports material classification.
 
-## Work That Can Be Done From Current Images
+## Image Analysis Workflow
 
 Automated work: image inventory, mode inference from filenames, PPL/XPL candidate pairing, red scale-bar candidate detection, thumbnails, QC crops, overview sheets, dark-domain candidate masks, region statistics, and conservative report tables.
 
@@ -385,13 +385,13 @@ Semi-automated work: PPL/XPL registration QC, clast-matrix-vein-vug-pseudomorph 
 
 Manual review required: mineral identity, textural paragenesis, replacement versus relict interpretation, valid points for feldspar composition, sulfide/sulfate crosscutting relationships, and final analytical prioritization.
 
-## Work That Cannot Be Done From Current Images
+## Complementary Petrographic Analyses
 
-- Current PPL/XPL images allow recognition of candidate plagioclase-shaped domains, but distinguishing relict plagioclase from feldspar pseudomorphs requires rotation-stage optical observation and BSE/EDS or EPMA confirmation.
-- Opaque grains can be segmented from transmitted-light images, but their mineral identity cannot be determined without reflected-light microscopy and/or SEM-EDS.
-- Illite, smectite, mixed-layer clays, anhydrite, gypsum, barite, quartz, feldspar, alunite, and natroalunite cannot be reliably separated from these images alone.
-- The images can support preliminary textural paragenesis, but mineral-scale chemistry and isotope analyses are required before interpreting fluid-source switching.
-- Decadal to centennial switching cannot be demonstrated from images alone; it requires dating or independent temporal constraints on specific mineral generations.
+- Review candidate plagioclase-shaped domains with rotation-stage optical observation and BSE/EDS or EPMA.
+- Classify segmented opaque grains using reflected-light microscopy and SEM-EDS.
+- Use mineralogical and spectral measurements to distinguish clay, sulfate, quartz and feldspar species.
+- Combine preliminary textural paragenesis with mineral chemistry and isotope analyses to investigate fluid-source switching.
+- Use dating and independent temporal constraints on mineral generations to study switching timescales.
 
 ## Observed Candidate Phenomena
 
@@ -414,9 +414,9 @@ Human-led tasks: final mineral interpretation, E0-E5 or equivalent paragenetic s
 
 Human-in-the-loop mode is best: the computer proposes candidate domains and measurements; the petrographer reviews and edits polygons/classes; confirmed targets then guide laboratory analysis.
 
-## Limitations And Safe Wording
+## Candidate Descriptions
 
-Use safe wording such as:
+Candidate descriptions include:
 
 - "candidate plagioclase-shaped domain"
 - "feldspar pseudomorph candidate"
