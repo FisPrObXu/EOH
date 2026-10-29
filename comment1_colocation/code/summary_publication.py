@@ -60,7 +60,7 @@ def joint_random_curves(members,model,grid,count,out,group_index):
         if len(members)==1:
             with np.load(root/'tables'/f'{model}_simulations.npz') as bank:counts=bank['counts'][:count].copy()
             if len(counts)!=count:raise UserError('Insufficient saved random curves.')
-            seed=None;method='existing evaluation bank; single field'
+            seed=None;method='existing evaluation bank; single field';sampling=record['area'].get('sampling',{}).get('evaluation',{}) if model=='area' else {}
         else:
             seed=stream.generate_state(4).tolist();scale=record['pixel_size_um']
             C=np.array(Image.open(root/'masks'/'C.png'))>0;W=np.array(Image.open(root/'masks'/'W.png'))>0;domain=W&~C
@@ -72,7 +72,7 @@ def joint_random_curves(members,model,grid,count,out,group_index):
                     locations[start:start+len(idx)]=idx;counts[start:start+len(idx)]=(dd[:,:,None]<=grid).sum(axis=1)
                 arrays[record['code']+'_locations_flat']=locations
             else:
-                areas=np.asarray(record['area']['areas'],int);cats=catalogue(domain,areas);anchors,variants=finite_bank(domain,areas,cats,count,seed,out)
+                areas=np.asarray(record['area']['areas'],int);cats=catalogue(domain,areas);anchors,variants,sampling=finite_bank(domain,areas,cats,count,seed,out,probe=np.minimum(D,record['distance_limit_um']),with_diagnostics=True)
                 if areas.sum()!=record['area']['total_area_px'] or areas.max()>record['area']['cap_area_px']:raise UserError('Pooled equal-area controls violate the original area constraints.')
                 idx=anchors.copy()
                 # Same native centroid rounding as self_service_engine.finite_model.
@@ -84,8 +84,9 @@ def joint_random_curves(members,model,grid,count,out,group_index):
                 for start in range(0,count,128):counts[start:start+128]=(D.ravel()[idx[start:start+128]][:,:,None]<=grid).sum(axis=1)
                 arrays[record['code']+'_anchors']=anchors;arrays[record['code']+'_variants']=variants;arrays[record['code']+'_areas']=areas
             method='fresh native-domain layouts; independent SeedSequence child stream'
+            if model=='point':sampling={}
         combined+=weight*(counts/n);arrays[record['code']+'_counts']=counts
-        metadata.append(dict(case_code=record['code'],particles_per_layout=int(n),observed_weight=int(weight),seed=seed,method=method))
+        metadata.append(dict(case_code=record['code'],particles_per_layout=int(n),observed_weight=int(weight),seed=seed,method=method,sampling=sampling))
     combined/=weights.sum()
     if not np.isfinite(combined).all() or combined.min()<0 or combined.max()>1+1e-12 or (np.diff(combined,axis=1)<-1e-12).any():raise UserError('Pooled random cumulative-fraction validation failed.')
     arrays.update(combined_cdfs=combined,grid_um=np.asarray(grid));np.savez_compressed(out/'tables'/f'{model}_joint_random_G{group_index:02d}.npz',**arrays)
@@ -100,7 +101,7 @@ def combined_distance_figures(records,out,settings):
     from matplotlib.ticker import PercentFormatter,MaxNLocator
     from publication21_figures import style,OBS,EVEN,RANDOM
     from self_service_report import save,random_curve_cloud
-    from self_service_engine import dump,UserError
+    from self_service_engine import dump,load,UserError
     from plot_settings import draw_cdf,register_legend,tag
     style();figures=[];groups=defaultdict(list);metadata=[]
     for record in records:
@@ -120,11 +121,15 @@ def combined_distance_figures(records,out,settings):
                     values.append((distances[:,None]<=grid).mean(axis=0))
                 combined[column]=np.average(values,axis=0,weights=weights)
             count=settings['random_curve_count'];random_curves,streams=joint_random_curves(eligible,model,grid,count,out,gi)
+            approximate=any(s.get('sampling',{}).get('approximate',False) for s in streams) or (model=='area' and any(r['area'].get('approximate_sampling',False) for r in eligible))
             combined['display_random_mean']=random_curves.mean(axis=0)
             combined.to_csv(out/'tables'/f'{model}_combined_G{gi:02d}.csv',index=False,encoding='utf-8-sig')
             table=pd.DataFrame(random_curves,columns=[f'r_{r:.10g}_um' for r in grid]);table.insert(0,'layout_index',np.arange(1,count+1))
             table.to_csv(out/'tables'/f'{model}_combined_random_G{gi:02d}.csv',index=False,encoding='utf-8-sig')
-            fig=plt.figure(figsize=(183/25.4,88/25.4));ax=fig.add_axes([.10,.20,.56,.62])
+            if settings['legend_position']=='below':
+                fig=plt.figure(figsize=(135/25.4,120/25.4));ax=fig.add_axes([.15,.30,.81,.59])
+            else:
+                fig=plt.figure(figsize=(183/25.4,88/25.4));ax=fig.add_axes([.10,.20,.56,.62])
             cloud_handle=random_curve_cloud(ax,grid,random_curves,settings)
             individual=tag(Line2D([],[],color='#a5a9ad',lw=.7,label='Individual observed'),'individual')
             for frame in frames:draw_cdf(ax,grid,frame.observed,settings,color='#a5a9ad',lw=.65,alpha=.8,zorder=2,role='individual')
@@ -133,13 +138,16 @@ def combined_distance_figures(records,out,settings):
             for column,color,ls,label,width in roles:handles.append(draw_cdf(ax,grid,combined[column],settings,color=color,ls=ls,lw=width,label=label,zorder=4)[0])
             handles.extend([cloud_handle,individual])
             ax.set(xlim=(grid[0],grid[-1]),ylim=(0,1.02),xlabel='Distance to dark region (μm)',ylabel='Cumulative fraction')
-            ax.set_title(f'{title} | G{gi:02d}\n{len(eligible)} fields; {int(weights.sum())} observed particles',loc='left',fontsize=8,pad=10,linespacing=1.45)
-            ax.yaxis.set_major_formatter(PercentFormatter(1));ax.set_yticks([0,.25,.5,.75,1]);ax.xaxis.set_major_locator(MaxNLocator(min(6,settings['x_tick_count'])))
+            display_title=title+' (approximate)' if approximate else title
+            info=load(out/'inputs'/'sample_identity.json') if (out/'inputs'/'sample_identity.json').exists() else {}
+            overlap=bool(info.get('overlap_conflicts'))
+            ax.set_title(f'{display_title} | G{gi:02d}\n{len(eligible)} fields; {int(weights.sum())} detections'+(' | overlap' if overlap else ''),loc='left',fontsize=8,pad=10,linespacing=1.45)
+            ax.yaxis.set_major_formatter(PercentFormatter(1));ax.set_yticks([0,.25,.5,.75,1]);ax.xaxis.set_major_locator(MaxNLocator(settings['x_tick_count']))
             ax.grid(axis='y',color='#edf0f2',lw=.4,zorder=0)
             register_legend(ax,handles=handles,loc='upper left',bbox_to_anchor=(1.08,1.0),borderaxespad=0,fontsize=7,labelspacing=1.25,handlelength=2.2)
             caption=f'Parameter group G{gi:02d}：'+('Center distances' if model=='point' else 'Equal-area design')+'Pooled cumulative curves (observed, uniform and random controls)'
             save(fig,out,f'{stem}_G{gi:02d}',figures,caption)
             metadata.append(dict(group=f'G{gi:02d}',model=model,case_codes=[r['code'] for r in eligible],N=int(weights.sum()),distance_limit_um=key[0],step_um=key[1],near_um=key[2],random_curves=count,streams=streams,
-                                 weighting='observed particle counts',combined_p=None,legend_location='reserved right column',random_range_is_measurement_ci=False))
+                                 weighting='observed particle counts',combined_p=None,approximate_sampling=approximate,legend_location='configured',random_range_is_measurement_ci=False))
     dump(out/'logs'/'comparison_groups.json',metadata)
     return figures

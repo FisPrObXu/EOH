@@ -44,6 +44,10 @@ def main():
     shutil.copyfile(ROOT/'code/windows_version_info.txt',source_code/'windows_version_info.txt')
     shutil.copyfile(resources/'config.json',source_code.parent/'config.json')
     shutil.copyfile(resources/'操作说明.html',source_root/'EOH_中文说明手册.html')
+    shutil.copyfile(resources/'操作说明.html',release/'EOH_中文说明手册.html')
+    for target in [release,source_root]:
+        shutil.copyfile(ROOT.parent/'README.md',target/'README.md')
+        shutil.copytree(ROOT.parent/'docs'/'images',target/'docs'/'images')
     (source_root/'构建说明.txt').write_text('EOH 0.4.1: see BUILDING.md and SOURCE.md for Windows build steps and corresponding source. EOH is licensed under AGPL-3.0-only; third-party components retain their own terms.',encoding='utf-8')
     for name in ['LICENSE','BUILDING.md','SOURCE.md','THIRD_PARTY_NOTICES.md']:
         shutil.copyfile(ROOT.parent/name,release/name)
@@ -60,7 +64,7 @@ def main():
                 original=Path(dist.locate_file(f))
                 if original.is_file():shutil.copyfile(original,folder/('_'.join(f.parts[-3:])))
     dump(release/'third_party_versions.json',notices)
-    (release/'Release_and_license_notes.txt').write_text('EOH — Eyes of heaven\nVersion 0.4.1 | Windows x64 portable test release\n\nExtract the whole archive and run EOH/EOH.exe. Keep the _internal folder. Python is not required.\nNVIDIA acceleration is optional; the CPU fallback is available.\nThe application interface and new report text are in English. See EOH_中文说明手册.html for the Chinese manual.\nNo private images, reviews or historical reports are bundled.\n\nEOH is licensed under AGPL-3.0-only. Third-party components retain their own terms. See LICENSE, THIRD_PARTY_NOTICES.md, SOURCE.md, and licenses/.\n',encoding='utf-8')
+    (release/'Release_and_license_notes.txt').write_text('EOH — Eyes of heaven\nVersion 0.4.1 | Windows x64 portable release\n\nExtract the whole archive and run EOH/EOH.exe with the accompanying _internal folder. The package includes the application runtime.\nChoose an NVIDIA GPU or CPU in the application. The interface and reports use English; the Chinese manual explains each step. README.md presents an illustrated sample.\n\nEOH is licensed under AGPL-3.0-only. Third-party components retain their own terms. See LICENSE, THIRD_PARTY_NOTICES.md, SOURCE.md, and licenses/.\n',encoding='utf-8')
     # CUDA header trees are deep; explicit Windows long paths keep the build
     # inside the user's project without relying on a machine-wide registry change.
     dist_path='\\\\?\\'+str(release.resolve()) if os.name=='nt' else str(release)

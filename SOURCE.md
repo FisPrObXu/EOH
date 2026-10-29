@@ -1,6 +1,6 @@
 # Corresponding source and reproducibility
 
-EOH 0.4.1 application sources, configuration, review-page assets, and build scripts are available in this repository. The `v0.4.1` release tag identifies the source revision accompanying the Windows executable. The archive also includes a source snapshot and license notices.
+EOH 0.4.1 application sources, configuration, review-page assets, and build scripts are available in this repository. The Windows archive includes the corresponding application source snapshot and license notices.
 
 The executable includes or uses these separately maintained components:
 
@@ -10,4 +10,4 @@ The executable includes or uses these separately maintained components:
 - [PyInstaller 6.17.0 source](https://github.com/pyinstaller/pyinstaller/tree/v6.17.0), under GPL-2.0-or-later with its bootloader exception.
 - Native CUDA NVRTC is a redistributable NVIDIA binary component, distributed subject to NVIDIA's applicable license rather than under AGPL; the accompanying notices and version metadata are in `licenses/`.
 
-Recorded Python and native component versions, distribution URLs where available, and third-party license texts are in [`licenses/`](licenses/). Build steps are in [BUILDING.md](BUILDING.md). The published binary was built from the included project sources; an independent rebuild is not claimed to have the same checksum.
+Recorded Python and native component versions, distribution URLs where available, and third-party license texts are in [`licenses/`](licenses/). Build steps are in [BUILDING.md](BUILDING.md). The published binary is built from the included project sources.

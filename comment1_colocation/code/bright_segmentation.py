@@ -1,7 +1,7 @@
 """Native-pixel bright candidates: local contrast seeds and per-particle boundaries.
 
-The boundary is an operational intensity contour, not a chemical phase identity
-or a subpixel size measurement. No distance-test result enters detection.
+The boundary is an operational intensity contour on native pixels. Phase names
+follow the supplied interpretation; detection uses image intensity and shape.
 """
 import numpy as np
 from scipy import ndimage as ndi
@@ -39,7 +39,7 @@ def description(cfg):
     return (f'<h2>Bright-grain candidate detection</h2><p>Local background brightness and noise identify bright peaks. Native pixels connected to a peak are retained when their local contrast reaches '
             f'{100*p["bright_boundary_fraction"]:g}% of that peak. Adjacent peaks are separated. Minimum candidate: {p["bright_min_pixels"]} pixels; '
             f'automatic area threshold: {p["bright_min_area_um2"]:g} μm². Original pixels and scale are retained. Outlines are reviewable intensity boundaries. '
-            'Intensity alone cannot establish mineral identity or a subpixel true grain size. Statistics use the saved outlines and exclusion rules for this revision.</p>')
+            'Mineral classes follow the supplied interpretation. Statistics use saved outlines, native pixels and exclusion rules for this revision.</p>')
 
 
 def detect_bright(g,p,readable=None):

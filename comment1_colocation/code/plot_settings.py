@@ -4,18 +4,19 @@ import re
 
 SERIES_NAMES = dict(observed='Observed / pooled observed distances', baseline='Random expectation / baseline', even='Uniform layout', random_example='First random example',
                     random_cloud='Random-curve ensemble', upper='95% random upper bound / reference range', individual='Individual observed curves',
-                    bright='Gold (bright)', gray='Chalcopyrite (dark gray)', hist_bars='Grain-size bars', density='Histogram density curve', mean_values='Mean-distance values')
+                    bright='Gold (bright)', gray='Chalcopyrite (dark gray)', hist_bars='Grain-size bars', density='Histogram density curve', mean_values='Mean-distance values',
+                    grain_ci='Grain-size sample confidence bands')
 SERIES_DEFAULT = dict(visible=True,label='',color='',linestyle='auto',linewidth=0.)
 
 
 DEFAULTS = dict(schema_version=1, histogram_mode='auto', bright_bins=10, gray_bins=20,
                 bright_bin_width_um=.1, gray_bin_width_um=.2, bar_width_fraction=1.,
                 show_density_curve=False, density_bandwidth_factor=1.,
-                curve_style='step', x_tick_count=4, random_curve_count=4999,
+                curve_style='line', x_tick_count=8, random_curve_count=4999,
                 figure_width_mm=0.,figure_height_mm=0.,custom_margins=False,
                 margin_left_pct=16.,margin_right_pct=4.,margin_bottom_pct=25.,margin_top_pct=12.,
-                legend_position='template',legend_font_size_pt=0.,legend_font_family='template',legend_text_color='#222222',
-                legend_columns=0,legend_frame=False,legend_anchor_x=1.05,legend_anchor_y=1.,axis_font_size_pt=0.,grid_mode='template')
+                legend_position='below',legend_font_size_pt=0.,legend_font_family='template',legend_text_color='#222222',
+                legend_columns=2,legend_frame=False,legend_anchor_x=1.05,legend_anchor_y=1.,axis_font_size_pt=0.,grid_mode='hide')
 
 
 def validate_settings(value=None):
@@ -84,6 +85,18 @@ def tag(artist,*roles,label_role=None):
     return artist
 
 
+def reference_style(value):
+    """Change appearance only; preserve simulation count, binning and object choices."""
+    settings=validate_settings(value)
+    settings.update(curve_style='line',x_tick_count=8,figure_width_mm=0.,figure_height_mm=0.,
+                    custom_margins=False,legend_position='below',legend_columns=2,
+                    legend_font_size_pt=0.,legend_font_family='template',legend_frame=False,
+                    legend_text_color='#222222',axis_font_size_pt=0.,grid_mode='hide')
+    for role in ('observed','baseline','upper','even','random_example','random_cloud','individual'):
+        settings['series_options'][role].update(color='',linestyle='auto',linewidth=0.)
+    return settings
+
+
 def register_legend(target,handles=None,**kwargs):
     fig=target.figure if hasattr(target,'figure') and target.figure is not None else target
     if handles is None:handles=target.get_legend_handles_labels()[0]
@@ -119,6 +132,9 @@ def apply_appearance(fig,settings):
     s=validate_settings(settings);position=s['legend_position'];axes=fig.axes
     width=s['figure_width_mm'] or fig.get_figwidth()*25.4;height=s['figure_height_mm'] or fig.get_figheight()*25.4
     if position=='right' and not s['figure_width_mm']:width=max(width,183.)
+    if position=='below':
+        if not s['figure_width_mm']:width=max(width,135.)
+        if not s['figure_height_mm']:height=max(height,120.)
     fig.set_size_inches(width/25.4,height/25.4,forward=False)
     legend_specs=getattr(fig,'_bse_legends',[])
     for ax in axes:
@@ -133,7 +149,8 @@ def apply_appearance(fig,settings):
         ax.set_position([left,bottom,right-left,top-bottom])
         if s['axis_font_size_pt']:
             for text in [ax.xaxis.label,ax.yaxis.label,*ax.get_xticklabels(),*ax.get_yticklabels()]:text.set_fontsize(s['axis_font_size_pt'])
-        if s['grid_mode']!='template':ax.grid(s['grid_mode']=='show',color='#e5e8ea',lw=.4)
+        if s['grid_mode']=='show':ax.grid(True,color='#e5e8ea',lw=.4)
+        elif s['grid_mode']=='hide':ax.grid(False)
     def style_artist(artist):
         roles=getattr(artist,'_bse_roles',())
         if not roles:return
@@ -178,6 +195,20 @@ def apply_appearance(fig,settings):
             destination=axes[0];kwargs.pop('bbox_to_anchor',None);kwargs.update(loc=position,borderaxespad=.5)
         elif position=='custom':destination=axes[0];kwargs.update(loc='upper left',bbox_to_anchor=(s['legend_anchor_x'],s['legend_anchor_y']),borderaxespad=0)
         destination.legend(handles=handles,**kwargs)
+    # Measure the actual rendered legend and axis label instead of estimating
+    # legend rows: label spacing, font and columns all affect its height.
+    if position=='below' and not s['custom_margins'] and fig.legends:
+        fig.canvas.draw()
+        renderer=fig.canvas.get_renderer()
+        legend_top=max(legend.get_window_extent(renderer).y1 for legend in fig.legends)
+        for ax in axes:
+            if not ax.xaxis.label.get_visible() or not ax.xaxis.label.get_text():continue
+            label_bottom=ax.xaxis.label.get_window_extent(renderer).y0
+            shift=max(0.,legend_top+6*fig.dpi/72-label_bottom)/fig.bbox.height
+            if shift:
+                box=ax.get_position()
+                if box.y1-box.y0-shift<.15:raise ValueError('The below-plot legend needs more room. Increase canvas height, reduce legend text or columns, or use a right-side legend.')
+                ax.set_position([box.x0,box.y0+shift,box.width,box.height-shift])
     fig._bse_applied_settings=s
 
 
@@ -254,4 +285,4 @@ def describe(settings):
     density = (f'Zero-boundary reflection density curve; Scott bandwidth × {s["density_bandwidth_factor"]:g}; scaled to counts using grain count × bin width; omitted for fewer than 2 grains or identical sizes' if s['show_density_curve'] else 'No smooth density curve')
     hidden='、'.join(SERIES_NAMES[k] for k,v in s['series_options'].items() if not v['visible']) or 'none'
     presentation=f'Statistical canvas width / height: {s["figure_width_mm"]:g}/{s["figure_height_mm"]:g} mm (0 = template); legend position: {s["legend_position"]}, font size: {s["legend_font_size_pt"]:g} pt (0 = template). Hidden objects: {hidden}. Visibility changes affect figures only; tables retain all data.'
-    return f'{bins}; bar width fraction {s["bar_width_fraction"]:g}；{density}. Cumulative display: {style}; approximately {s["x_tick_count"]} major x intervals. Where available, distance comparisons show the first {s["random_curve_count"]} random-layout cumulative curves in generation order, one per layout, without selection by outcome; 4999 shows all evaluated layouts. Only the first layout map is shown. Above 200 curves, only the random background is rasterized at 600 dpi; all raw curves remain in tables. Formal tests still use all 4999 layouts. Display count does not change grains per layout. Linear / smooth connections add no measurements; tests use the original distance grid and p-values do not change.'+presentation
+    return f'{bins}; bar width fraction {s["bar_width_fraction"]:g}；{density}. Cumulative display: {style}; approximately {s["x_tick_count"]} major x intervals. Where available, distance comparisons show the first {s["random_curve_count"]} random-layout cumulative curves in generation order, one per layout; 4999 shows all evaluated layouts. The first layout map is shown. Above 200 curves, the random background is rasterized at 600 dpi; all raw curves remain in tables. Center-model tests use all 4999 layouts. Each layout retains its grain count. Linear and smooth connections display the original distance grid; tests use the recorded p-values.'+presentation

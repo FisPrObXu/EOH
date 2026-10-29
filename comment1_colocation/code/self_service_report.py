@@ -43,7 +43,12 @@ def save(fig,out,stem,figures,title):
     plt.close(fig)
     file=out/'figures'/f'{stem}.pdf';text=text_audit(file.read_bytes(),minimum_pt=5);collisions=collision_audit(file)
     dump(out/'logs'/f'{stem}.text.json',text);dump(out/'logs'/f'{stem}.collision.json',collisions)
-    if not text['auditable'] or text['below_minimum_count'] or collisions['summary']['fail']:raise UserError('Figure layout checks failed. No report was published. See the case logs.')
+    if not text['auditable'] or text['below_minimum_count'] or collisions['summary']['fail']:
+        with fitz.open(file) as doc:doc[0].get_pixmap(matrix=fitz.Matrix(160/72,160/72)).save(out/'logs'/f'{stem}.preview.png')
+        issues=[f.get('message','layout collision')+(': '+str(f.get('text')) if f.get('text') else '') for f in collisions.get('findings',[]) if f.get('severity')=='FAIL']
+        if not text['auditable']:issues.append('text could not be audited')
+        if text['below_minimum_count']:issues.append('text is smaller than 5 pt')
+        raise UserError(f"Figure layout checks failed for {stem}: {'; '.join(issues[:3])}. No report was published; inspect the failure logs or adjust plot settings.")
     native=[]
     with fitz.open(file) as doc:
         page=doc[0];size=[page.rect.width,page.rect.height]
@@ -112,7 +117,7 @@ def plot_axes():
 
 
 def random_layout_curves(out,model,n,grid,settings):
-    """Use the existing evaluation bank in generation order; do not resimulate/select."""
+    """Use the existing evaluation bank in generation order."""
     with np.load(out/'tables'/f'{model}_simulations.npz') as bank:
         counts=bank['counts'][:settings['random_curve_count']].copy()
         total=len(bank['counts'])
@@ -142,11 +147,11 @@ def random_curve_cloud(ax,x,curves,settings):
     return tag(Line2D([],[],color=color,lw=1,label=f'Random layouts (n = {count})'),'random_cloud')
 
 
-def cdf_plot(curves,title,extra=False,settings=None,random_cdfs=None):
+def cdf_plot(curves,title,extra=False,settings=None,random_cdfs=None,approximate=False):
     settings=validate_settings(settings)
     fig,ax=plot_axes()
     random_handle=random_curve_cloud(ax,curves.r_um,random_cdfs,settings) if random_cdfs is not None else None
-    for col,color,ls,label in [('baseline','#222222','--','Random baseline'),('upper','#999999',':','Upper MC reference (95%)'),('observed',OBS,'-','Observed')]:
+    for col,color,ls,label in [('baseline','#222222','--','Random baseline'),('upper','#999999',':','Approx. upper reference (95%)' if approximate else 'Upper MC reference (95%)'),('observed',OBS,'-','Observed')]:
         draw_cdf(ax,curves.r_um,curves[col],settings,color=color,ls=ls,lw=1.1,label=label)
     if extra:
         draw_cdf(ax,curves.r_um,curves.even,settings,color=EVEN,ls='-.',lw=1,label='Evenly spread example')
@@ -159,7 +164,7 @@ def cdf_plot(curves,title,extra=False,settings=None,random_cdfs=None):
     return fig
 
 
-def ptext(value):return 'not valid' if value is None else f'{value:.4f}'
+def ptext(value):return 'unavailable' if value is None else f'{value:.4f}'
 
 
 def plots(case,out,d,observed,point,area,review):
@@ -196,7 +201,7 @@ def plots(case,out,d,observed,point,area,review):
         random_cdfs,area_cloud=random_layout_curves(out,'area',area['N'],curves.r_um,presentation)
         area_cloud['displayed_layout_image']='05_Random_Layout'
         cloud_records['area']=area_cloud
-        save(cdf_plot(curves,'Equal-area design comparison',True,presentation,random_cdfs),out,'07_Area_Curves',figures,'Equal-area design: selected random curves and observed / uniform references')
+        save(cdf_plot(curves,'Equal-area design comparison',True,presentation,random_cdfs,area.get('approximate_sampling',False)),out,'07_Area_Curves',figures,'Equal-area design: selected random curves and observed / uniform references')
     dump(out/'logs'/'random_layout_curves.json',cloud_records)
     sim=np.load(out/'tables'/'point_simulations.npz');fig,ax=plot_axes()
     _,_,bars=ax.hist(sim['statistic'],bins=24,color=NULL,edgecolor='white',linewidth=.4)
@@ -229,9 +234,9 @@ def plots(case,out,d,observed,point,area,review):
 
 def summary_text(point):
     if not point['supported']:return 'Some observed centers lie inside dark regions, outside the exclusive center-model domain. All observations are retained, but formal test interpretation is deferred. Check the review issues.'
-    if point['curve_p']>=.05:return 'The data do not provide sufficient evidence against the specified uniform random-center model. Near-distance fractions and effect sizes may be described, but an overall distance advantage is not established.'
+    if point['curve_p']>=.05:return 'The whole-curve p-value is at least 0.05 under the specified uniform random-center model. The full curve and near-distance fractions describe the observed effect.'
     if point['all_grid_at_least_reference'] and point['mean_p']<.05:return 'On the prespecified distance grid, the observed distribution favors shorter distances and has a smaller capped mean. This supports spatial proximity beyond the specified uniform random-center model in this field.'
-    return 'The prespecified grid shows a near-distance cumulative advantage over the uniform random-center model. Interpret its extent using the full curve and mean; it does not establish shorter distances at every scale.'
+    return 'The prespecified grid shows a near-distance cumulative advantage over the uniform random-center model. Use the full curve and capped mean to assess its extent across distances.'
 
 
 def build_report(case,out,d,observed,point,area,review,bundle=True):
@@ -240,40 +245,42 @@ def build_report(case,out,d,observed,point,area,review,bundle=True):
     name=html.escape(meta['name']);near=a['near_um'];cap=a['rmax_um'];revision=review['revision']
     source=out/'inputs'/'native.png';shutil.copyfile(case/'report'/'1_native_grayscale.png',source)
     flags=[]
-    if not review.get('human_review_confirmed',False):flags.append('This is an automatic candidate analysis. Outlines and exclusions are not human-confirmed; numerical results describe the candidate segmentation and are not final mineral-phase statistics.')
-    if not point['supported']:flags.append('Observed centers inside dark regions: '+', '.join(point['zero_ids'])+'. These points are retained; tail probabilities from an incompatible model are not treated as valid p-values.')
+    if not review.get('human_review_confirmed',False):flags.append('This is an automatic candidate analysis. The numerical results describe the candidate segmentation; review outlines and exclusions.')
+    if not point['supported']:flags.append('Observed centers inside dark regions: '+', '.join(point['zero_ids'])+'. These points are retained for review; the corresponding model probabilities are marked unavailable.')
     if area['available']:
-        if area['actual_overlap_ids']:flags.append('Observed bright / dark pixel overlap requires review: '+', '.join(area['actual_overlap_ids'])+'. Check raster boundaries; do not alter real image geometry to fit a model.')
-        if area['incompatible_ids']:flags.append('An equalized standard region does not fit at these observed centers: '+', '.join(area['incompatible_ids'])+'. This may reflect smaller original objects or the W boundary, rather than segmentation error. Equal-area results are design controls only.')
-        if not area['same_count']:flags.append('Control and observed region counts differ. Compare layouts and distributions descriptively; no equal-sample-size formal test is claimed.')
+        if area['actual_overlap_ids']:flags.append('Observed bright / dark pixel overlap requires review: '+', '.join(area['actual_overlap_ids'])+'. Review the corresponding raster boundaries.')
+        if area['incompatible_ids']:flags.append('The equalized standard region has different placement support at these observed centers: '+', '.join(area['incompatible_ids'])+'. This may reflect smaller original objects or the W boundary. Equal-area results describe the selected design.')
+        if not area['same_count']:flags.append('Control and observed region counts differ; compare their layouts and distributions descriptively.')
+        if area.get('approximate_sampling'):flags.append('Dense equal-area layouts use approximate random-move chains. The report provides sampling diagnostics and descriptive equal-area comparisons.')
     else:flags.append(area['reason'])
     for f in figures:
         if f['native_dpi'] and f['native_dpi']<300:flags.append(f['title']+f'At this displayed size, effective native resolution is approximately {f["native_dpi"]:.0f} dpi. Exporting at 600 dpi adds no image information.')
         if f['collision']['warn']:flags.append(f['title']+'Layout warnings are present. Inspect the corresponding previews before submission.')
     status='Human-reviewed' if review.get('human_review_confirmed',False) else 'Automatic candidates; review pending'
-    header=f'<h1>{name}: spatial proximity analysis</h1><p><b>{status}</b>; saved revision {revision}; pixel size {d["s"]:g} μm; native image {d["g"].shape[1]}×{d["g"].shape[0]} pixels. A field is not automatically an independent sample replicate.</p>'
+    header=f'<h1>{name}: spatial proximity analysis</h1><p><b>{status}</b>; saved revision {revision}; pixel size {d["s"]:g} μm; native image {d["g"].shape[1]}×{d["g"].shape[0]} pixels. Sample IDs define the grouping of fields for multi-sample summaries.</p>'
     intro=header+'<div class="key"><b>Main interpretation: </b>'+summary_text(point)+'</div>'
     intro+=f'<p>Included: {point["N"]} bright objects; within {near:g} μm: {point["observed_near"]} objects ({100*point["observed_fraction"]:.1f}%); random expectation: {point["expected_near"]:.2f} objects ({100*point["reference_fraction"]:.1f}%）。</p>'
-    intro+=f'<p>{cap:g} μm capped mean distance: observed {point["observed_mean"]:.4g} μm, random expectation {point["reference_mean"]:.4g} μm. Whole-curve one-sided MC p = {ptext(point["curve_p"])}; mean-distance one-sided MC p = {ptext(point["mean_p"])}. MC resolution is 1/{point["B"]+1}; zero extreme simulations do not imply p = 0.</p>'
+    intro+=f'<p>{cap:g} μm capped mean distance: observed {point["observed_mean"]:.4g} μm, random expectation {point["reference_mean"]:.4g} μm. Whole-curve one-sided MC p = {ptext(point["curve_p"])}; mean-distance one-sided MC p = {ptext(point["mean_p"])}. MC resolution is 1/{point["B"]+1}; the minimum reported Monte Carlo p-value is 1/(B+1).</p>'
     if flags:intro+='<h2>Review issues and scope</h2><ul>'+''.join('<li>'+html.escape(s)+'</li>' for s in flags)+'</ul>'
     if point['zero_ids']:
         intro+='<p>Select these objects on the review page: '+', '.join(html.escape(x) for x in point['zero_ids'])+'. Original records and previous reports are retained.</p>'
     table=d['table'];nsmall=int((table.exclusion_reason=='below_auto_minimum').sum());nout=int(((table.kind=='bright')&table.eligible&~table.in_W).sum())
-    methods=f'<h2>Method, step by step</h2><ol><li>Read native grayscale using the supplied scale and crop. Manual rectangles and automatically detected unreadable regions define A.</li><li>Protect the interior of A by {cap:g} μm to define W; inspect the orange window. Dark distance targets use the complete readable context, without cropping them to W first.</li><li>Apply all active edits from saved revision {revision} and retain manually added, redrawn or explicitly confirmed objects. A further {nsmall} original small bright candidates fail the size threshold, and {nout} retained bright centers lie outside W; see the object table.</li><li>Measure each equally weighted center to the nearest dark region. Objects beyond {cap:g} μm remain in the denominator, and means use the same distance cap. Curves start at {a["step_um"]:g} μm.</li><li>The center model fixes dark regions and W, then independently redistributes the same number of centers uniformly outside dark regions. Its baseline is computed exactly from all allowed native pixels.</li><li>Use 4999 simulations to compare the maximum positive cumulative-fraction difference across the grid; also report near counts and capped means. Simulations do not increase the number of independent samples.</li></ol>'
-    methods+='<h2>Baseline and upper MC</h2><p>The baseline is the expected cumulative fraction under the specified random model. Upper MC is its 95% simulation reference upper bound on the prespecified grid. Baselines and bounds are paired within each model; center and equal-area model references are not interchangeable. This is not a measurement-error band for the observed curve.</p>'
+    methods=f'<h2>Method, step by step</h2><ol><li>Read native grayscale using the supplied scale and crop. Manual rectangles and automatically detected unreadable regions define A.</li><li>Protect the interior of A by {cap:g} μm to define W; inspect the orange window. Dark distance targets use the complete readable context.</li><li>Apply all active edits from saved revision {revision} and retain manually added, redrawn or explicitly confirmed objects. A further {nsmall} original small bright candidates fail the size threshold, and {nout} retained bright centers lie outside W; see the object table.</li><li>Measure each equally weighted center to the nearest dark region. Objects beyond {cap:g} μm remain in the denominator, and means use the same distance cap. Curves start at {a["step_um"]:g} μm.</li><li>The center model fixes dark regions and W, then independently redistributes the same number of centers uniformly outside dark regions. Its baseline is computed exactly from all allowed native pixels.</li><li>Use 4999 simulations to compare the maximum positive cumulative-fraction difference across the grid; also report near counts and capped means. Sample IDs record the experimental grouping.</li></ol>'
+    methods+='<h2>Baseline and upper MC</h2><p>The baseline is the expected cumulative fraction under the specified random model. Upper MC is its 95% simulation reference upper bound on the prespecified grid. Each model has its own baseline and simulation reference bound.</p>'
     methods+='<h2>Plot settings for this revision</h2><p>'+html.escape(describe_plot_settings(run_settings(out)))+'</p>'
     from bright_segmentation import description as bright_description
     methods+=bright_description(cfg)
     clouds=load(out/'logs'/'random_layout_curves.json')
-    methods+=f'<h2>Random layouts and result curves</h2><p>The center model shows {clouds["point"]["displayed"]} random curves, each representing one complete layout. They are the first layouts in generation order from the 4999 evaluation simulations, without selection by closeness to observations. Light-blue curves are neither measurement-error bands nor additional independent samples. Display count controls the number drawn; formal tests use all 4999.</p>'
+    methods+=f'<h2>Random layouts and result curves</h2><p>The center model shows {clouds["point"]["displayed"]} random curves, each representing one complete layout. They are the first layouts in generation order from the 4999 evaluation simulations. Light-blue curves display random-model realizations. Display count controls the number drawn; center-model tests use all 4999.</p>'
     if 'area' in clouds:methods+=f'<p>The equal-area model separately shows {clouds["area"]["displayed"]} random curves from its own model. The first layout map corresponds to the first curve, highlighted in orange. Each model uses its own random results.</p>'
     else:methods+='<p>The first random layout map uses the center model and corresponds to layout 1 in the random-curve table.</p>'
     methods+='<p>tables/point_random_layout_curves.csv and, when available, area_random_layout_curves.csv store every displayed curve: one row per layout; layout_index=1 is the first example, and subsequent columns give cumulative fractions within specified distances. All 4999 results remain in the corresponding simulations.npz.</p>'
     if area['available']:
         counts={v:area['areas'].count(v) for v in sorted(set(area['areas']))};eq=' + '.join(f'{n}×{v}' for v,n in counts.items())
-        methods+=f'<h2>Equal-area design controls</h2><p>Observed total area: {area["total_area_px"]} pixels, divided into {area["N"]} regions: {eq}. Each region satisfies the integer-pixel cap of 75% of the largest original bright region: {area["cap_area_px"]}. Simulated regions lie completely inside W and outside dark regions, without overlap. Whole-layout rejection sampling is used. The uniform layout illustrates coverage; the random map is the first valid layout under a fixed seed.</p>'
-        methods+=f'<p>Equal-area random reference mean: {area["reference_mean"]:.4g} μm; uniform example: {area["even_mean"]:.4g} μm; first random example: {area["random_example_mean"]:.4g} μm. An independent set of 4999 layouts estimates the reference curve, so one random example does not replace the expected level. Equal-area tail fractions are design-specific comparisons; do not change counts, thresholds or windows to seek smaller p-values.</p>'
-    methods+='<p>Bright / dark intensity classes do not independently identify chemical phases. The uniform model does not preserve grain clustering or spatial heterogeneity; rejecting it does not establish a specific trapping process or geological mechanism. Independent sample identities require experimental records.</p>'
+        sampler='Approximate independent random-move chains provide descriptive controls and sampling diagnostics.' if area.get('approximate_sampling') else 'Independent whole-layout rejection sampling is used.'
+        methods+=f'<h2>Equal-area design controls</h2><p>Observed total area: {area["total_area_px"]} pixels, divided into {area["N"]} regions: {eq}. Each region satisfies the integer-pixel cap of 75% of the largest original bright region: {area["cap_area_px"]}. Simulated regions lie completely inside W and outside dark regions, without overlap. {sampler} The uniform layout illustrates coverage; the random map is the first valid layout under a fixed seed.</p>'
+        methods+=f'<p>Equal-area random reference mean: {area["reference_mean"]:.4g} μm; uniform example: {area["even_mean"]:.4g} μm; first random example: {area["random_example_mean"]:.4g} μm. An independent set of 4999 layouts estimates the reference curve; the first layout provides a visual example. Equal-area comparisons use the recorded counts, thresholds and windows.</p>'
+    methods+='<p>Bright and dark classes follow the supplied mineral interpretation. The uniform model represents the specified spatial comparison. Sample identities follow the experimental records.</p>'
     methods+='<h2>Result files</h2><p>Each figure is supplied separately as PDF, SVG and 600 dpi PNG/TIFF. tables contains object distances and simulation statistics; reviewed contains applied native labels; inputs and code preserve sources and code for this revision. Regenerate after further review edits.</p>'
     blocks=[]
     for i,f in enumerate(figures,1):

@@ -6,4 +6,4 @@
 - [PyInstaller 6.17.0](https://github.com/pyinstaller/pyinstaller/tree/v6.17.0).
 - [nature-figure audit scripts](https://github.com/Yuan1z0825/nature-skills/tree/main/skills/nature-figure/scripts), Apache-2.0.
 
-The complete component and source notices are in [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) and [SOURCE.md](../SOURCE.md). Original microscopy data and user review records are not published with EOH.
+The complete component and source notices are in [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) and [SOURCE.md](../SOURCE.md). The README presents an illustrated analysis example.

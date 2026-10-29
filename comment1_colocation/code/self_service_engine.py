@@ -301,10 +301,19 @@ def point_model(d,observed,settings,job,out):
     dump(out/'logs'/'point_summary.json',pdict);return pdict,curves
 
 
-def finite_bank(domain,areas,cats,B,seed,job):
+def finite_bank(domain,areas,cats,B,seed,job,probe=None,with_diagnostics=False):
     from acceleration import try_finite_bank
-    accelerated=try_finite_bank(domain,areas,cats,B,seed,job)
-    return accelerated if accelerated is not None else _finite_bank_cpu(domain,areas,cats,B,seed,job)
+    try:
+        accelerated=try_finite_bank(domain,areas,cats,B,seed,job)
+        result=accelerated if accelerated is not None else _finite_bank_cpu(domain,areas,cats,B,seed,job)
+        info=dict(method='independent whole-layout rejection',approximate=False,count=B,seed=seed if isinstance(seed,list) else int(seed))
+    except UserError as error:
+        if 'Whole-layout rejection sampling is inefficient' not in str(error):raise
+        emit('Dense layout: using approximate independent random-move chains for descriptive equal-area comparisons.')
+        from dense_layout import sample
+        aa,vv,info=sample(domain,areas,cats,B,seed,job,probe=probe)
+        result=(aa,vv)
+    return (*result,info) if with_diagnostics else result
 
 
 def _finite_bank_cpu(domain,areas,cats,B,seed,job):
@@ -348,7 +357,9 @@ def finite_model(d,observed,settings,job,out,observed_labels):
     if areas.min()<1 or areas.max()>cap_area:return dict(available=False,reason='The current control count cannot preserve integer-pixel total area while satisfying the 75% maximum-area cap. The center model remains available. Set a different count explicitly in a new case if needed.')
     domain=d['W']&~d['C'];cats=catalogue(domain,areas);B=settings['B'];cap=settings['rmax_um'];near=settings['near_um']
     emit('Generating independent equal-area reference and random layouts…')
-    ca,cv=finite_bank(domain,areas,cats,B,settings['seed']+1001,job);aa,vv=finite_bank(domain,areas,cats,B,settings['seed']+1002,job)
+    probe=np.minimum(cap,d['D'])
+    ca,cv,calibration_sampling=finite_bank(domain,areas,cats,B,settings['seed']+1001,job,probe=probe,with_diagnostics=True)
+    aa,vv,evaluation_sampling=finite_bank(domain,areas,cats,B,settings['seed']+1002,job,probe=probe,with_diagnostics=True)
     def distances(anchors,variants):
         idx=anchors.copy()
         for j,area in enumerate(areas):
@@ -381,16 +392,17 @@ def finite_model(d,observed,settings,job,out,observed_labels):
     curves=pd.DataFrame(dict(r_um=grid,observed=oc/N,baseline=bc/(K*B),upper=np.minimum(1,bc/(K*B)+critical),
          even=[(even.distance_um<=r).mean() for r in grid],random_example=[(example.distance_um<=r).mean() for r in grid]))
     curves.to_csv(out/'tables'/'area_curves.csv',index=False,encoding='utf-8-sig')
-    same_count=K==N
+    same_count=K==N;approximate=calibration_sampling['approximate'] or evaluation_sampling['approximate']
     result=dict(available=True,N=K,observed_N=N,total_area_px=total,cap_area_px=cap_area,areas=areas.tolist(),
         observed_mean=float(observed.distance_capped_um.mean()),reference_mean=float(np.minimum(cap,cd).mean()),
         even_mean=float(even.distance_capped_um.mean()),random_example_mean=float(example.distance_capped_um.mean()),
         expected_near=float((cd<=near).sum(axis=1).mean()),incompatible_ids=diagnostic.loc[~diagnostic.fits_any_standard,'object_id'].tolist(),
         actual_overlap_ids=diagnostic.loc[diagnostic.overlap_dark_px>0,'object_id'].tolist(),
-        curve_tail=float((1+(nums>=obsnum).sum())/(B+1)) if same_count else None,
-        mean_tail=float((1+(means<=observed.distance_capped_um.mean()).sum())/(B+1)) if same_count else None,
+        curve_tail=float((1+(nums>=obsnum).sum())/(B+1)) if same_count and not approximate else None,
+        mean_tail=float((1+(means<=observed.distance_capped_um.mean()).sum())/(B+1)) if same_count and not approximate else None,
         same_count=same_count,interpretation='Equal-area design comparison; physical assumptions and support require separate interpretation',
-        random_seed=settings['seed']+1002,calibration_seed=settings['seed']+1001)
+        random_seed=settings['seed']+1002,calibration_seed=settings['seed']+1001,approximate_sampling=approximate,
+        sampling=dict(calibration=calibration_sampling,evaluation=evaluation_sampling))
     np.savez_compressed(out/'tables'/'area_simulations.npz',anchors=aa,variants=vv,areas=areas,counts=counts,mean=means,near=nears,statistic=nums/denom,reference_counts=bc)
     dump(out/'logs'/'footprints.json',{str(a):[v['offsets'].tolist() for v in c['variants']] for a,c in cats.items()})
     dump(out/'logs'/'area_summary.json',result);return result
@@ -448,7 +460,7 @@ def analyze(case,confirmed_revision,human_review=True):
             dump(job/'logs'/'compute_backend.json',acceleration_report())
             if spatial_available:
                 html_path=job/'report'/'Report.html';content=html_path.read_text(encoding='utf-8');content=content.replace('<h1>','<p><a href="Grain_Size_Report.html">Open gold / chalcopyrite grain-size report</a></p><h1>',1);html_path.write_text(content,encoding='utf-8')
-            for filename in ['acceleration.py','app_runtime.py','responsive_ui.py','grain_size_analysis.py','plot_settings.py','exclusion_geometry.py','review_exclusions.js','self_service_engine.py','segmentation.py','bright_segmentation.py','apply_review21.py','self_service_report.py','review21_display.py','publication21_figures.py','audit_pdf_text.py','audit_figure_collisions.py','audit_panel_alignment.py']:
+            for filename in ['dense_layout.py','acceleration.py','app_runtime.py','responsive_ui.py','grain_size_analysis.py','plot_settings.py','exclusion_geometry.py','review_exclusions.js','self_service_engine.py','segmentation.py','bright_segmentation.py','apply_review21.py','self_service_report.py','review21_display.py','publication21_figures.py','audit_pdf_text.py','audit_figure_collisions.py','audit_panel_alignment.py']:
                 (job/'code').mkdir(exist_ok=True);shutil.copyfile(ROOT/'code'/filename,job/'code'/filename)
             with __import__('zipfile').ZipFile(job/'Export.zip','w',__import__('zipfile').ZIP_DEFLATED) as bundle:
                 for file in job.rglob('*'):

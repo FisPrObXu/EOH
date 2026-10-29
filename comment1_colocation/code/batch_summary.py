@@ -128,6 +128,62 @@ def summary_tables(records,grain,distances,out):
     return pooled
 
 
+def sample_tables(records,grain,out,info):
+    """Summarize all fields in each declared sample without treating fields as independent."""
+    import numpy as np
+    import pandas as pd
+    if not info.get('available'):return []
+    mapping=info['case_samples'];samples=[];spatial=[];membership=[]
+    for r in records:membership.append(dict(case_code=r['code'],case_name=r['name'],sample_id=mapping[r['code']]))
+    pd.DataFrame(membership).to_csv(out/'tables'/'sample_membership.csv',index=False,encoding='utf-8-sig')
+    for sample in info['sample_ids']:
+        cases=[r for r in records if mapping[r['code']]==sample];codes=[r['code'] for r in cases]
+        for kind,name in [('bright','Gold'),('gray','Chalcopyrite')]:
+            f=grain[grain.case_code.isin(codes)&(grain.kind==kind)&grain.included].sort_values('equivalent_circle_diameter_um')
+            x=f.equivalent_circle_diameter_um.to_numpy();weights=f.area_um2.to_numpy();cum=np.cumsum(weights)/weights.sum() if len(x) else np.array([])
+            row=dict(sample_id=sample,case_codes=';'.join(codes),field_count=len(cases),kind=kind,phase=name,N=len(x),total_area_um2=float(weights.sum()),
+                     mean_um=float(x.mean()) if len(x) else None,median_um=float(np.median(x)) if len(x) else None,
+                     q25_um=float(np.quantile(x,.25)) if len(x) else None,q75_um=float(np.quantile(x,.75)) if len(x) else None)
+            for q in (.1,.5,.9):row['area_d'+str(round(100*q))+'_um']=float(x[min(np.searchsorted(cum,q),len(x)-1)]) if len(x) else None
+            samples.append(row)
+        grouped=defaultdict(list)
+        for r in cases:
+            if r['point']:grouped[(r['distance_limit_um'],r['distance_step_um'],r['near_um'])].append(r)
+        for (cap,step,near),group in grouped.items():
+            weights=np.array([r['point']['N'] for r in group],float)
+            row=dict(sample_id=sample,case_codes=';'.join(r['code'] for r in group),field_count=len(group),N=int(weights.sum()),distance_limit_um=cap,distance_step_um=step,near_um=near)
+            for key in ['observed_mean','reference_mean','observed_fraction','reference_fraction']:
+                row[key]=float(np.average([r['point'][key] for r in group],weights=weights))
+            spatial.append(row)
+    pd.DataFrame(samples).to_csv(out/'tables'/'sample_grain_summary.csv',index=False,encoding='utf-8-sig')
+    pd.DataFrame(spatial,columns=['sample_id','case_codes','field_count','N','distance_limit_um','distance_step_um','near_um','observed_mean','reference_mean','observed_fraction','reference_fraction']).to_csv(out/'tables'/'sample_spatial_summary.csv',index=False,encoding='utf-8-sig')
+    return samples
+
+
+def sample_figures(rows,out,info):
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from matplotlib.lines import Line2D
+    from matplotlib.ticker import MaxNLocator
+    from plot_settings import tag,register_legend
+    from self_service_report import save
+    figures=[]
+    for kind,title,stem,color in [('bright','Gold sizes by sample','23_Gold_By_Sample','#aa3377'),('gray','Chalcopyrite sizes by sample','24_Chalcopyrite_By_Sample','#2878b5')]:
+        selected=[r for r in rows if r['kind']==kind]
+        for start in range(0,len(selected),12):
+            block=selected[start:start+12];fig,ax=plt.subplots(figsize=(5.3,max(2.8,.26*len(block)+1.5)));fig.subplots_adjust(left=.24,right=.95,bottom=.28,top=.85)
+            for y,r in enumerate(block):
+                if r['N']:
+                    tag(ax.plot([r['q25_um'],r['q75_um']],[y,y],color=color,lw=1.5)[0],kind)
+                    tag(ax.plot(r['median_um'],y,'o',color=color,ms=3)[0],kind)
+            ax.set_yticks(np.arange(len(block)),[f'{r["sample_id"]} (n={r["N"]})' for r in block]);ax.invert_yaxis()
+            ax.set(xlabel='Equivalent-circle diameter (μm)',title=title+(' (overlap)' if info.get('overlap_conflicts') else ''),xlim=(0,None));ax.xaxis.set_major_locator(MaxNLocator(5))
+            register_legend(ax,handles=[tag(Line2D([],[],color=color,lw=1.5,marker='o',label='Median and interquartile range'),kind)],loc='upper left',bbox_to_anchor=(0,-.25))
+            suffix=f'_{start//12+1:02d}' if len(selected)>12 else ''
+            save(fig,out,stem+suffix,figures,f'{title}: median and within-sample interquartile range')
+    return figures
+
+
 def comparison_figures(records,out,settings):
     import numpy as np
     import pandas as pd
@@ -197,6 +253,10 @@ def report_documents(records,pooled,figures,out):
     import fitz
     escaped=html.escape;confirmed=sum(r['human_review_confirmed'] for r in records)
     intro=f'<h1>Selected cases: spatial analysis and grain-size summary</h1><p>Generated: {datetime.now():%Y-%m-%d %H:%M}. Includes {len(records)} cases, of which {confirmed} are marked human-reviewed and {len(records)-confirmed} are candidates. Each result corresponds to the revision below.</p>'
+    sample_path=out/'inputs'/'sample_identity.json';sample_info=load(sample_path) if sample_path.exists() else dict(available=False,reason='Sample identities not supplied.')
+    if sample_info.get('overlap_conflicts'):
+        pairs='; '.join(' / '.join(p.get('case_names',[])) for p in sample_info['overlap_conflicts'])
+        intro+='<p style="color:#a00000"><b>Registered image overlap: exploratory output.</b> Selected images '+escaped(pairs)+' share registered image content. Some regions may appear in both fields. The resampling bands are exploratory; verify source identities and de-duplicate for independent-sample inference.</p>'
     intro+='<table><tr><th>Code</th><th>Case name</th><th>Saved revision</th><th>Status</th><th>Distance / size guard (μm)</th></tr>'
     for r in records:intro+=f'<tr><td>{r["code"]}</td><td>{escaped(r["name"])}</td><td>r{r["review_revision"]}</td><td>'+('Reviewed' if r['human_review_confirmed'] else 'Candidate; review pending')+f'</td><td>{r["distance_limit_um"]:g} / {r["size_guard_um"]:g}</td></tr>'
     intro+='</table>'
@@ -204,12 +264,17 @@ def report_documents(records,pooled,figures,out):
     for r in records:
         if r['source_sha256']:repeated[r['source_sha256']].append(r['code'])
     duplicates=[v for v in repeated.values() if len(v)>1]
-    if duplicates:intro+='<p>Repeated original-image sources: '+escaped('；'.join(' / '.join(v) for v in duplicates))+'. All selected cases are retained, including these duplicate sources in pooled distributions. They are not additional independent observations.</p>'
-    methods='<h2>Summary methods and interpretation</h2><p>This report describes selected fields. Independent sample / batch identities are unavailable, so pooled figures are descriptive: no pooled significance p-value is computed, and neither grain counts nor 4999 simulations are independent sample counts. Original per-field p-values, controls and limitations remain in the individual reports.</p><p>Grain sizes use complete eligible grains and 2D equivalent-circle diameters. Pooled histograms and cumulative curves weight grains equally, rather than photographs; fields with more grains contribute more. Per-field plots show medians and interquartile ranges, which describe distributions rather than confidence intervals. See individual parameters for windows, scales and thresholds; cropped boundary fragments are not included.</p><p>Mean-distance plots are grouped by distance cap. Each row is a field, with n eligible bright grains. Magenta circles show observed means, black diamonds the matching center-model expectation; capped gray segments show the original 4999-layout 2.5%–97.5% random reference range. This describes random-model variability, not a confidence interval for the observed mean. Right-side values are observed / random expectation, retaining the original cap. Cases without distance results are listed without invented means.</p><p>Pooled distance curves are grouped by limit, step and near threshold, and weighted by eligible bright-grain counts. The legend occupies reserved space on the right: magenta solid = pooled observed; green dash-dot = uniform layout; orange dotted = weighted first saved random examples; black dashed = model expectation; light blue = pooled random results; light gray = individual observed curves. A uniform layout is not the random mean. Center and equal-area models retain their own controls.</p><p>For multiple fields, pooled random curves are regenerated with independent random-number streams within each frozen allowed domain, then combined with the same weights. This avoids pairing identically seeded kth layouts across fields. The center model retains per-field counts and excludes dark regions. The equal-area model preserves per-field total area, control counts, the original 75% area cap and non-overlap constraints. Single-field groups use saved evaluation curves. Pooled curves are descriptive: individual upper bounds are not averaged into a new bound and no pooled p-value is produced. Original p-values remain unchanged. Seeds, native positions / anchors and all curves are saved in tables as joint_random data and CSV.</p><p>All selected cases are retained. Missing distance tests are marked as not performed; grain-size results are still summarized. Plot display uses the first selected case settings. Interpolation adds no measurements. Separate figures are supplied as PDF, SVG and 600 dpi PNG/TIFF, with sources, parameters, original copies and grain-level data.</p>'
-    methods=methods.replace('Magenta circles show observed means, black diamonds the matching center-model expectation; capped gray segments show ','Circles show observed means, diamonds the matching center-model expectation; capped segments show ')
-    methods=methods.replace('Right-side values are observed / random expectation','Value labels are observed / random expectation; custom layouts may place them in row labels')
-    methods=methods.replace('The legend occupies reserved space on the right: magenta solid = pooled observed; green dash-dot = uniform layout; orange dotted = weighted first saved random examples; black dashed = model expectation; light blue = pooled random results; light gray = individual observed curves.','Curves include pooled observed results, uniform layouts, saved first random examples, matching random expectations, pooled random results and individual observations. Legend position, labels, colors, styles and visibility follow this revision settings.')
-    methods=methods.replace('Plot display uses the first selected case settings','Plot display uses the settings saved in inputs/plot_settings.json for this revision')
+    if duplicates:intro+='<p>Repeated original-image sources: '+escaped('；'.join(' / '.join(v) for v in duplicates))+'. Selected cases and duplicate-source identities are shown in the pooled distributions.</p>'
+    methods='<h2>Summary methods and interpretation</h2><p>This report describes selected fields and their individual spatial tests. Grain sizes use complete eligible regions and two-dimensional equivalent-circle diameters. Pooled curves weight each grain; per-field medians and interquartile ranges describe each field’s distribution.</p><p>Mean-distance plots show observed means, the corresponding center-model expectation, and the 2.5%–97.5% random reference range. Pooled distance curves group compatible analysis parameters and weight each field by its bright-grain count. The legend identifies observed, evenly spread, first random and random-model results.</p><p>Random curves use independent random-number streams within each field. The center model retains the field counts and allowed domain. The equal-area design preserves total area, control counts, the 75% maximum-area cap and non-overlap. Seeds, native positions and curves are available in the tables. Pooled curves are descriptive; individual model tests are reported by field.</p><p>Separate figures are available as PDF, SVG and 600 dpi PNG/TIFF, with source data, parameters and review records.</p>'
+    if sample_info.get('available'):
+        if sample_info.get('overlap_conflicts'):
+            methods+=f'<p>The {sample_info["independent_sample_count"]} declared sample IDs are used in {sample_info["bootstrap_replicates"]} sample-level resamples. The 2.5%–97.5% pointwise percentile bands are exploratory because registered overlap can repeat observations. Sample identity, segmentation and pixel resolution describe the scope of the result.</p>'
+        else:
+            methods+=f'<p>Grain-size shaded bands are 95% pointwise percentile bootstrap intervals based on {sample_info["independent_sample_count"]} declared independent samples and {sample_info["bootstrap_replicates"]} resamples. All images and grains within a sampled unit are kept together. The bands describe pointwise sample variation under the declared independent-sample grouping.</p>'
+        methods+='<p>Multiple selected fields with the same sample ID are grouped as subsamples. The <a href="tables/sample_membership.csv">sample membership</a>, <a href="tables/sample_grain_summary.csv">per-sample grain-size statistics</a>, and <a href="tables/sample_spatial_summary.csv">per-sample spatial summaries</a> are exported. Spatial summaries are descriptive and stratified by distance parameters.</p>'
+    else:methods+='<p>Assign sample IDs to display sample-level bootstrap bands. Current sample grouping: '+escaped(sample_info.get('reason','sample identities pending'))+'.</p>'
+    methods+='<p>Count-weighted curves describe the fraction of included regions; area-weighted curves describe the fraction of their measured two-dimensional area. Both use measured two-dimensional areas. Weighted D10, D50 and D90 are saved separately. As reporting precedents, Berrezueta et al. (2016), <a href="https://doi.org/10.3390/geosciences6020030">Geosciences</a>, separately present counts and area-weighted distributions in ore microscopy; Zhang et al. (2024), <a href="https://doi.org/10.1038/s41377-024-01563-6">Light: Science &amp; Applications</a>, show cumulative and size-distribution graphics in a different powder-imaging setting. The present measurements and weights are defined above.</p>'
+    if any(r.get('area',{}).get('approximate_sampling') for r in records):methods+='<p>Selected equal-area layouts use approximate independent random-move chains. Sampling diagnostics accompany these cases. Pooled equal-area curves are descriptive.</p>'
     from plot_settings import run_settings,describe,SERIES_NAMES
     presentation=run_settings(out);methods+='<h2>Plot settings for this revision</h2><p>'+escaped(describe(presentation))+'</p>'
     customized=[(SERIES_NAMES[role],value['label']) for role,value in presentation['series_options'].items() if value['label']]
@@ -219,7 +284,7 @@ def report_documents(records,pooled,figures,out):
         p=r['point']
         if p:spatial+=f'<tr><td>{r["code"]}</td><td>{p["N"]}</td><td>{100*p["observed_fraction"]:.1f}% / {100*p["reference_fraction"]:.1f}%<br>Threshold {r["near_um"]:g} μm</td><td>{number(p["observed_mean"])} / {number(p["reference_mean"])}<br>Cap {r["distance_limit_um"]:g} μm</td><td>{number(p["curve_p"])}</td><td>{number(p["mean_p"])}</td></tr>'
         else:spatial+=f'<tr><td>{r["code"]}</td><td colspan="5">Distance test not performed: grain-size-only mode or no eligible bright grains / dark targets in the distance window.</td></tr>'
-    spatial+='</table><p>p-values are from each original model, not a pooled test. Incompatible exclusive models retain invalid / missing p-values as recorded in their reports.</p>'
+    spatial+='</table><p>Each individual report presents its model-specific p-values and analysis status.</p>'
     grain='<h2>Pooled grain sizes (equal grain weights; descriptive)</h2><table><tr><th>Class</th><th>Count</th><th>Mean (μm)</th><th>Median (μm)</th><th>Interquartile range (μm)</th></tr>'
     for p in pooled:grain+=f'<tr><td>{p["phase"]}</td><td>{p["N"]}</td><td>{number(p["mean_um"])}</td><td>{number(p["median_um"])}</td><td>{number(p["q25_um"])}–{number(p["q75_um"])}</td></tr>'
     grain+='</table><h2>Per-field grain sizes</h2><table><tr><th>Code</th><th>Class</th><th>Included / excluded</th><th>Mean (μm)</th><th>Median (μm)</th><th>Interquartile range (μm)</th></tr>'
@@ -294,7 +359,7 @@ def build_summary(selection,cases_root,frozen_summary=None,presentation=None):
                 engine.emit(f'Redrawing frozen summary {index}/{len(cases)}：'+record['name'],job=str(job))
                 shutil.copytree(within(frozen/relative,frozen),job/relative)
                 root=job/relative/'result';case_settings,settings_source=frozen_case_settings(cases_root,record,job/relative)
-                redrawn=case_settings!=run_settings(root)
+                redrawn=case_settings!=run_settings(root) or not (root/'figures'/'14_Grain_Area_Curves.pdf').exists()
                 if redrawn:
                     engine.emit('Redrawing both case reports with saved plot settings: '+record['name'],job=str(job))
                     from self_service_report import redraw_saved_reports
@@ -309,6 +374,11 @@ def build_summary(selection,cases_root,frozen_summary=None,presentation=None):
                 engine.emit(f'Export {index}/{len(cases)}：'+load(case/'case.json')['name'],job=str(job))
                 copy_case(case,result,job/relative);record,grains,distances=collect_case(case,result,code,relative)
                 case_settings=run_settings(result);settings_source=str(case/'plot_settings.json');redrawn=False
+                copied_result=job/relative/'result'
+                if not (copied_result/'figures'/'14_Grain_Area_Curves.pdf').exists():
+                    engine.emit('Adding area-weighted grain figures to the copied case report: '+record['name'],job=str(job))
+                    from self_service_report import redraw_saved_reports
+                    redraw_saved_reports(job/relative,copied_result,case_settings);configure_temp(job/'_runtime');redrawn=True
                 dump(job/relative/'plot_settings.json',case_settings)
             case_presentations.append(dict(code=record['code'],name=record['name'],settings=case_settings,settings_source=settings_source,redrawn_from_saved_data=redrawn))
             records.append(record);grain_frames.append(grains)
@@ -319,12 +389,16 @@ def build_summary(selection,cases_root,frozen_summary=None,presentation=None):
         dump(job/'logs'/'compute_backend.json',acceleration_report())
         dump(job/'inputs'/'case_plot_settings.json',case_presentations)
         check_cancel(job);engine.emit('Drawing per-field comparisons and pooled distributions…',job=str(job))
+        from sample_metadata import resolve as resolve_sample_identities
+        sample_info=resolve_sample_identities(records,folder);dump(job/'inputs'/'sample_identity.json',sample_info)
+        sample_rows=sample_tables(records,grain,job,sample_info)
         figures=comparison_figures(records,job,settings)
+        if sample_rows:figures+=sample_figures(sample_rows,job,sample_info)
         from grain_size_analysis import distribution_figures
-        figures+=distribution_figures(job,grain,[]);dump(job/'logs'/'figures.json',figures)
+        figures+=distribution_figures(job,grain,[],sample_info=sample_info);dump(job/'logs'/'figures.json',figures)
         dump(job/'inputs'/'source_manifest.json',dict(created=datetime.now().isoformat(),cases=records,pooled_inference=False,plot_design_version='summary-publication-v3',revised_from=str(frozen) if frozen else None))
         check_cancel(job);report_documents(records,pooled,figures,job)
-        for name in ['acceleration.py','app_runtime.py','batch_summary.py','summary_publication.py','revise_summary_figures.py','self_service_engine.py','self_service_report.py','grain_size_analysis.py','bright_segmentation.py','plot_settings.py','publication21_figures.py','area_redistribution21.py','analyze_review21.py','apply_review21.py','audit_pdf_text.py','audit_figure_collisions.py','audit_panel_alignment.py']:shutil.copyfile(ROOT/'code'/name,job/'code'/name)
+        for name in ['dense_layout.py','sample_metadata.py','acceleration.py','app_runtime.py','batch_summary.py','summary_publication.py','revise_summary_figures.py','self_service_engine.py','self_service_report.py','grain_size_analysis.py','bright_segmentation.py','plot_settings.py','publication21_figures.py','area_redistribution21.py','analyze_review21.py','apply_review21.py','audit_pdf_text.py','audit_figure_collisions.py','audit_panel_alignment.py']:shutil.copyfile(ROOT/'code'/name,job/'code'/name)
         check_cancel(job);engine.emit('Packaging summary and selected cases…',job=str(job))
         with zipfile.ZipFile(job/'Export.zip','w',zipfile.ZIP_DEFLATED) as archive:
             for file in job.rglob('*'):
@@ -341,7 +415,15 @@ def build_summary(selection,cases_root,frozen_summary=None,presentation=None):
         return destination
     except Exception as error:
         if not isinstance(error,engine.Cancelled):
-            log=ROOT/'logs'/('summary_failed_'+datetime.now().strftime('%Y%m%d_%H%M%S')+'.json');dump(log,dict(error=str(error),selection=selection))
+            stamp=datetime.now().strftime('%Y%m%d_%H%M%S')+'_'+uuid.uuid4().hex[:4]
+            diagnostic=ROOT/'logs'/('summary_failed_'+stamp);diagnostic.mkdir(parents=True,exist_ok=False)
+            copied=[]
+            for pattern in ('*.collision.json','*.text.json','*.alignment.json','*.preview.png'):
+                # Redrawn individual reports keep their own audit files under sources/.
+                for source in sorted(job.rglob(pattern),key=lambda p:p.stat().st_mtime,reverse=True)[:20]:
+                    relative=source.relative_to(job);target=diagnostic/relative;target.parent.mkdir(parents=True,exist_ok=True)
+                    shutil.copyfile(source,target);copied.append(relative.as_posix())
+            dump(diagnostic/'failure.json',dict(error=str(error),selection=selection,diagnostic_files=copied))
         raise
     finally:
         if job.exists() and (job/'.temporary-owner.json').exists():safe_remove(job,folder/'_tmp')

@@ -7,7 +7,7 @@
 </style>
 <header><h1>EOH — Eyes of heaven · Outline review</h1>
 <p>Select an outline to delete or redraw it, or add a missed object. Original grayscale is on the left; current outlines are on the right. Both panes support editing.</p>
-<p class="muted">Completed outlines use bright/dark class colors. Save edits as review annotations, then regenerate the report to apply native masks and update statistics. Orange dashes mark window W. Objects outside W remain annotated but do not automatically enter the main statistics.</p>
+<p class="muted">Completed outlines use bright/dark class colors. Save edits as review annotations, then regenerate the report to apply native masks and update statistics. Orange dashes mark window W. Annotations display all objects; the main statistics use the selected analysis window.</p>
 <div class="legend"><span style="--c:#2878b5">Candidate dark-gray regions</span><span style="--c:#aa3377">Candidate bright objects</span><span style="--c:#d88216">Analysis window W</span><span style="--c:#e8b52d">Selected object</span><span style="--c:#19a098">Active draft</span></div></header>
 <div id="offline">Opened as a local file. Edits stay in this page only. Use <a href="http://127.0.0.1:8765/">the local review service with autosave</a>; records will be saved to the project folder.</div>
 <div class="toolbar">
@@ -98,7 +98,7 @@ async function load(){if(!online){$('offline').style.display='block';$('save-sta
 async function saveAll(){
  if(ui.pointer){$('hint').textContent='Release the mouse to finish the current drawing first.';return;}
  if(ui.draft.length){finish();if(ui.draft.length){$('save-state').textContent='Outline unfinished: provide at least three boundary points enclosing valid area. The draft remains in this page.';$('save-state').className='warn';saveSummary();return;}}
- if(!online||blocked){$('save-state').textContent=blocked?'Saving is blocked. Keep this page open and resolve the save error above before refreshing.':'Local-file mode cannot write back. Keep this page open and use the local review service.';$('save-state').className='error';return;}
+ if(!online||blocked){$('save-state').textContent=blocked?'Saving requires attention. Keep this page open and resolve the save error above.':'Keep this page open and reconnect through the local review service to save edits.';$('save-state').className='error';return;}
  if(object()&&$('comment').value!==(object().comment||''))action('comment');
  dirty=true;await save();saveSummary();
 }

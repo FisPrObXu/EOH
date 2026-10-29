@@ -72,7 +72,26 @@ def measure_grains(d,out):
     return table,summaries,selected
 
 
-def distribution_figures(out,table,summaries):
+def sample_bootstrap(frame,grid,sample_info,weighting,seed):
+    """Resample independent samples, retaining all nested image observations."""
+    mapping=sample_info['case_samples'];ids=sample_info['sample_ids'];n=len(ids)
+    numerator=np.zeros((n,len(grid)),float);denominator=np.zeros(n,float)
+    for j,sample in enumerate(ids):
+        cases=[code for code,value in mapping.items() if value==sample]
+        f=frame[frame.case_code.isin(cases)].sort_values('equivalent_circle_diameter_um')
+        x=f.equivalent_circle_diameter_um.to_numpy();w=np.ones(len(f)) if weighting=='count' else f.area_um2.to_numpy()
+        denominator[j]=w.sum()
+        if len(x):
+            cumulative=np.r_[0.,np.cumsum(w)];numerator[j]=cumulative[np.searchsorted(x,grid,side='right')]
+    rng=np.random.default_rng(seed);replicates=sample_info['bootstrap_replicates']
+    picks=rng.integers(0,n,size=(replicates,n));weights=np.stack([np.bincount(row,minlength=n) for row in picks])
+    totals=weights@denominator;valid=totals>0
+    if valid.sum()<max(100,int(.9*replicates)):return None
+    values=(weights[valid]@numerator)/totals[valid,None]
+    return np.clip(np.quantile(values,[.025,.975],axis=0),0.,1.),int(valid.sum())
+
+
+def distribution_figures(out,table,summaries,sample_info=None):
     from plot_settings import run_settings,histogram_edges,density_curve,draw_cdf,register_legend,tag
     settings=run_settings(out);figures=[];diagnostics={}
     for kind,stem,title,color in [('bright','11_Gold_Size_Distribution','Gold grain sizes',COLORS['bright']),('gray','12_Chalcopyrite_Size_Distribution','Chalcopyrite region sizes',COLORS['gray'])]:
@@ -90,21 +109,45 @@ def distribution_figures(out,table,summaries):
                     diagnostics[kind]['density_drawn']=True
                     pd.DataFrame(dict(diameter_um=xx,density_per_um=density,expected_count_per_bin=scaled)).to_csv(out/'tables'/f'{kind}_size_density_curve.csv',index=False,encoding='utf-8-sig')
         else:ax.text(.5,.5,'No complete eligible regions in W',transform=ax.transAxes,ha='center',fontsize=7)
-        ax.set(xlabel='Equivalent-circle diameter (μm)',ylabel='Grain count');ax.set_title(title,loc='left',pad=8)
+        ax.set(xlabel='Equivalent-circle diameter (μm)',ylabel='Grain count');ax.set_title(title+' (overlap)' if sample_info and sample_info.get('overlap_conflicts') else title,loc='left',pad=8)
         ax.xaxis.set_major_locator(MaxNLocator(settings['x_tick_count']));ax.yaxis.set_major_locator(MaxNLocator(4,integer=True));ax.set_ylim(bottom=0)
         handles=[tag(Line2D([],[],color=color,lw=2,label=f'n = {len(x)}; complete regions in W'),kind)]
         if diagnostics.get(kind,{}).get('density_drawn'):handles.append(tag(Line2D([],[],color='#222222',lw=1.1,label='KDE trend (count scale)'),kind,'density'))
         register_legend(ax,handles=handles,loc='upper left',bbox_to_anchor=(0,-.28),borderaxespad=0)
         save(fig,out,stem,figures,'Gold grain-size distribution' if kind=='bright' else 'Chalcopyrite grain-size distribution')
-    fig,ax=plot_axes();curve=[]
-    for kind,name,color in [('bright','Gold',COLORS['bright']),('gray','Chalcopyrite',COLORS['gray'])]:
-        x=np.sort(table.loc[(table.kind==kind)&table.included,'equivalent_circle_diameter_um'].to_numpy());y=np.arange(1,len(x)+1)/max(1,len(x))
-        if len(x):draw_cdf(ax,np.r_[0,x],np.r_[0,y],settings,color=color,lw=1.2,label=f'{name} (n = {len(x)})')
-        curve.extend(dict(kind=kind,diameter_um=float(a),fraction=float(b)) for a,b in zip(x,y))
-    pd.DataFrame(curve,columns=['kind','diameter_um','fraction']).to_csv(out/'tables'/'grain_size_ecdf.csv',index=False,encoding='utf-8-sig')
-    ax.set(xlabel='Equivalent-circle diameter (μm)',ylabel='Cumulative grain fraction',ylim=(0,1.02),xlim=(0,None));ax.set_title('Grain-size cumulative distributions',loc='left',pad=8)
-    ax.xaxis.set_major_locator(MaxNLocator(settings['x_tick_count']));ax.set_yticks([0,.25,.5,.75,1]);ax.yaxis.set_major_formatter(PercentFormatter(1));register_legend(ax,loc='upper left',bbox_to_anchor=(0,-.28),borderaxespad=0)
-    save(fig,out,'13_Grain_Size_Curves',figures,'Cumulative grain-size distributions')
+    quantiles=[]
+    for weighting,stem,title,ylabel,filename in [
+        ('count','13_Grain_Size_Curves','Grain-size distribution by count','Cumulative grain fraction','grain_size_ecdf.csv'),
+        ('area','14_Grain_Area_Curves','Grain-size distribution by 2D area','Cumulative 2D area fraction','grain_area_ecdf.csv')]:
+        fig,ax=plot_axes();curve=[];bounds=[];has_band=False
+        for phase_index,(kind,name,color) in enumerate([('bright','Gold',COLORS['bright']),('gray','Chalcopyrite',COLORS['gray'])]):
+            f=table[(table.kind==kind)&table.included].sort_values('equivalent_circle_diameter_um')
+            x=f.equivalent_circle_diameter_um.to_numpy();w=np.ones(len(x)) if weighting=='count' else f.area_um2.to_numpy()
+            y=np.cumsum(w)/w.sum() if len(x) else np.array([])
+            if len(x):
+                for q in (.1,.5,.9):
+                    quantiles.append(dict(kind=kind,weighting=weighting,quantile=q,diameter_um=float(x[min(np.searchsorted(y,q,side='left'),len(x)-1)]),grain_count=len(x),area_um2=float(f.area_um2.sum())))
+            if len(x):draw_cdf(ax,np.r_[0,x],np.r_[0,y],settings,color=color,lw=1.2,label=f'{name} (n = {len(x)})',role=kind)
+            curve.extend(dict(kind=kind,diameter_um=float(a),fraction=float(b)) for a,b in zip(x,y))
+            if len(x) and sample_info and sample_info.get('available'):
+                grid=np.unique(np.r_[0,x]);result=sample_bootstrap(f,grid,sample_info,weighting,sample_info['seed']+phase_index+(10 if weighting=='area' else 0))
+                if result is not None:
+                    band,valid=result;has_band=True
+                    tag(ax.fill_between(grid,band[0],band[1],step='post' if settings['curve_style']=='step' else None,color=color,alpha=.15,lw=0,zorder=0),kind,'grain_ci')
+                    bounds.extend(dict(kind=kind,diameter_um=float(d),lower_95=float(lo),upper_95=float(hi),valid_resamples=valid) for d,lo,hi in zip(grid,*band))
+        pd.DataFrame(curve,columns=['kind','diameter_um','fraction']).to_csv(out/'tables'/filename,index=False,encoding='utf-8-sig')
+        if bounds:pd.DataFrame(bounds).to_csv(out/'tables'/f'grain_{weighting}_pointwise_bootstrap.csv',index=False,encoding='utf-8-sig')
+        conflict=bool(sample_info and sample_info.get('overlap_conflicts'))
+        ax.set(xlabel='Equivalent-circle diameter (μm)',ylabel=ylabel,ylim=(0,1.02),xlim=(0,None));ax.set_title(title+'\nOverlapping fields: exploratory only' if conflict else title,loc='left',pad=8)
+        ax.xaxis.set_major_locator(MaxNLocator(settings['x_tick_count']));ax.set_yticks([0,.25,.5,.75,1]);ax.yaxis.set_major_formatter(PercentFormatter(1))
+        handles=ax.get_legend_handles_labels()[0]
+        if has_band:
+            bandlabel=(f'Exploratory sample band (n = {sample_info["independent_sample_count"]})' if conflict else f'95% pointwise sample CI (n = {sample_info["independent_sample_count"]})')
+            handles.append(tag(Line2D([],[],color='#929292',lw=4,alpha=.25,label=bandlabel),'grain_ci'))
+        register_legend(ax,handles=handles,loc='upper left',bbox_to_anchor=(0,-.28),borderaxespad=0)
+        suffix=('; exploratory sample-bootstrap band; overlapping images' if conflict else '; bands: 95% pointwise independent-sample bootstrap') if has_band else ''
+        save(fig,out,stem,figures,('Cumulative grain-size distribution by particle count' if weighting=='count' else 'Cumulative grain-size distribution weighted by 2D area')+suffix)
+    pd.DataFrame(quantiles,columns=['kind','weighting','quantile','diameter_um','grain_count','area_um2']).to_csv(out/'tables'/'grain_size_weighted_quantiles.csv',index=False,encoding='utf-8-sig')
     dump(out/'logs'/'plot_settings_effective.json',dict(settings=settings,histograms=diagnostics))
     return figures
 
@@ -132,13 +175,14 @@ def build_grain_report(case,out,d,grain,review,spatial_available):
     save(fig,out,'14_Grain_Size_Selection',figures,f'Complete grains included in size statistics ({guard:g} μm edge guard)')
     status='Human-reviewed results' if confirmed else 'Automatic candidates: outlines and hole / crack exclusions require review'
     name=html.escape(meta['name']);intro=f'<h1>{name}: grain sizes inside the safe window</h1><p><b>{status}</b>. Saved revision r{review["revision"]}; scale {d["s"]:.8g} μm/pixel.</p>'
-    intro+='<p>Classes follow the user-supplied interpretation: dark gray = candidate chalcopyrite; bright white = candidate gold. The software does not independently identify mineral phases.</p>'
+    intro+='<p>Classes follow the user-supplied interpretation: dark gray = candidate chalcopyrite; bright white = candidate gold. The class names follow the supplied mineral interpretation.</p>'
     intro+='<table><tr><th>Class</th><th>Count</th><th>Mean diameter (μm)</th><th>Median diameter (μm)</th><th>Excluded regions</th></tr>'
     for r in summaries:
         text=lambda value:'—' if value is None else f'{value:.4g}'
         intro+=f'<tr><td>{r["phase"]}</td><td>{r["N"]}</td><td>{text(r["mean_um"])}</td><td>{text(r["median_um"])}</td><td>{r["excluded"]}</td></tr>'
     intro+='</table>'
-    methods=f'<h2>Methods and purpose</h2><ol><li>Retain native pixels, remove instrument text panels, and calibrate using the image scale bar or an explicit pixel size.</li><li>Remove voids and manual exclusions from the readable domain, then apply a grain-size edge guard of {guard:g} μm; distance tests retain a guard of {cfg["analysis"]["rmax_um"]:g} μm. The orange line on the grain-inclusion map marks the {guard:g} μm grain-size window. Orange lines in distance and null-model maps mark the distance window. Red hole / crack buffers use the specified radii; the safe window adds the edge guard.</li><li>Include only connected grains lying completely inside the grain-size window. Exclude boundary-crossing grains as whole objects; never count cropped fragments as smaller grains. Distance tests select by center, so counts can differ.</li><li>Area A = native pixel count × pixel size²; 2D equivalent-circle diameter d = √(4A/π). Major / minor axes and areas are also exported. This is not a true 3D sphere diameter.</li><li>Histograms show grain counts; cumulative curves show the fraction at or below a diameter, weighting each grain equally. Bin edges are exported with the tables.</li><li>Dark regions use connected masks, merging overlapping outlines to avoid double counting. Touching unresolved grains may form one region and require manual separation.</li></ol>'
+    methods=f'<h2>Methods and purpose</h2><ol><li>Retain native pixels, remove instrument text panels, and calibrate using the image scale bar or an explicit pixel size.</li><li>Remove voids and manual exclusions from the readable domain, then apply a grain-size edge guard of {guard:g} μm; distance tests retain a guard of {cfg["analysis"]["rmax_um"]:g} μm. The orange line on the grain-inclusion map marks the {guard:g} μm grain-size window. Orange lines in distance and null-model maps mark the distance window. Red hole / crack buffers use the specified radii; the safe window adds the edge guard.</li><li>Include only connected grains lying completely inside the grain-size window. Exclude boundary-crossing grains as whole objects. Distance tests select by center, so counts can differ.</li><li>Area A = native pixel count × pixel size²; 2D equivalent-circle diameter d = √(4A/π). Major / minor axes and areas are also exported. This diameter describes a two-dimensional section.</li><li>Histograms show grain counts; cumulative curves show the fraction at or below a diameter, weighting each grain equally. Bin edges are exported with the tables.</li><li>Dark regions use connected masks, merging overlapping outlines to avoid double counting. Touching unresolved grains may form one region and require manual separation.</li></ol>'
+    methods+='<p>Separate cumulative curves show weighting by grain count and by measured two-dimensional area within each phase. Area weighting uses the measured two-dimensional region areas. The table grain_size_weighted_quantiles.csv contains D10, D50 and D90 for each weighting, using the first diameter at which the cumulative fraction reaches the stated percentile. This report describes the measured field.</p>'
     from plot_settings import run_settings,describe
     methods+='<h2>Plot settings for this revision</h2><p>'+html.escape(describe(run_settings(out)))+'</p>'
     from bright_segmentation import description as bright_description
@@ -146,13 +190,13 @@ def build_grain_report(case,out,d,grain,review,spatial_available):
     diagnostics=load(out/'logs'/'plot_settings_effective.json')
     for kind,record in diagnostics['histograms'].items():
         if record.get('density_note'):methods+='<p>'+('Gold: ' if kind=='bright' else 'Chalcopyrite: ')+html.escape(record['density_note'])+'</p>'
-    if any(r['N']==0 for r in summaries):methods+='<p>A zero count means no complete region qualifies under the current segmentation and safe window. It does not establish absence of that material from the original image.</p>'
+    if any(r['N']==0 for r in summaries):methods+='<p>A zero count indicates that the current segmentation and safe-window selection contain zero complete regions.</p>'
     if meta.get('calibration',{}).get('method')=='visually_verified_2um_bar':methods+='<p>Pixel size was calibrated from the center-to-center cap distance of a 2 μm scale bar, with approximately ±1 native pixel endpoint uncertainty. Print DPI was not treated as a physical scale.</p>'
     if cfg['analysis'].get('exclusive_phases'):methods+='<p>Bright pixels are subtracted from the dark mask, preventing the same pixel from contributing to both phase areas.</p>'
-    if cfg.get('adaptive_segmentation'):methods+='<p>Dark / void thresholds adapt to the image background; exact values are saved in config.json. Original displays and area calculations do not repaint intensities. Candidate boundaries still require review.</p>'
+    if cfg.get('adaptive_segmentation'):methods+='<p>Dark / void thresholds adapt to the image background; exact values are saved in config.json. Displays use the original intensities; review the candidate boundaries.</p>'
     for r in summaries:
         if r['below_9px']:methods+=f'<p>{r["phase"]}There are {r["below_9px"]} included objects smaller than 9 native pixels. Their size is sensitive to thresholds and pixel resolution; results describe segmented area without claiming subpixel boundary accuracy.</p>'
-    methods+='<p>The independent experimental unit is the image / sample, not each grain. Fields are not automatically combined into a population distribution. Regenerating after review preserves this revision.</p>'
+    methods+='<p>Sample IDs define the experimental grouping for multi-field summaries. Regenerating after review records the current revision.</p>'
     shown=[]
     if spatial_available:
         for f in load(out/'logs'/'figures.json'):

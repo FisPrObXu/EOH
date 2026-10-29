@@ -16,7 +16,7 @@ from urllib.request import urlopen,Request
 import webbrowser
 
 from self_service_engine import ROOT,CASES,load,dump,tempdir,safe_remove,configure_temp,validate_spec,validate_output_root,UserError
-from plot_settings import read_settings,validate_settings,SERIES_NAMES
+from plot_settings import read_settings,validate_settings,reference_style,SERIES_NAMES
 from responsive_ui import ScrollPanel,fit_window
 from app_runtime import command as process_command,FROZEN,error_message
 
@@ -98,7 +98,7 @@ class ImportDialog(tk.Toplevel):
         ttk.Entry(basic,textvariable=self.known,width=12).grid(row=2,column=1,sticky='w');ttk.Button(basic,text='Calibrate from drawn bar',command=self.calibrate).grid(row=2,column=2,columnspan=2)
         ttk.Label(basic,text='Native pixel size (μm/pixel)').grid(row=3,column=0,sticky='w')
         ttk.Entry(basic,textvariable=self.scale,width=20).grid(row=3,column=1,columnspan=2,sticky='w')
-        ttk.Label(basic,text='Or enter a known pixel size; do not enter image width.').grid(row=3,column=3,columnspan=3,sticky='w')
+        ttk.Label(basic,text='Or enter the physical size of one pixel.').grid(row=3,column=3,columnspan=3,sticky='w')
         ttk.Checkbutton(basic,text='Detect voids / unreadable regions automatically; also apply drawn exclusion rectangles',variable=self.auto).grid(row=4,column=0,columnspan=6,sticky='w',pady=6)
         ttk.Label(basic,text='Edit hole points, crack lines and exclusion radii on the review page next.').grid(row=5,column=0,columnspan=6,sticky='w')
         from bright_segmentation import defaults as bright_defaults
@@ -209,6 +209,7 @@ class PlotSettingsDialog(tk.Toplevel):
         if on_redraw:ttk.Button(buttons,text='Save and redraw latest summary',command=lambda:self.accept(True)).pack(side='right',padx=8)
         self.save_button=ttk.Button(buttons,text='Save plot settings',command=self.accept);self.save_button.pack(side='right')
         ttk.Button(buttons,text='Reset plot defaults',command=self.reset_defaults).pack(side='left')
+        ttk.Button(buttons,text='Apply reference style',command=self.apply_reference_style).pack(side='left',padx=8)
         self.book=ttk.Notebook(frame);self.book.pack(fill='both',expand=True,pady=10)
         tabs=[SettingsTab(self.book) for _ in range(3)]
         for tab,title in zip(tabs,['Distributions and curves','Canvas and legend','Plotted objects']):self.book.add(tab,text=title)
@@ -245,7 +246,7 @@ class PlotSettingsDialog(tk.Toplevel):
         self.variables['random_curve_count']=tk.StringVar(value=str(settings['random_curve_count']))
         ttk.Spinbox(curves,from_=1,to=4999,textvariable=self.variables['random_curve_count'],width=10).grid(row=2,column=1,sticky='w')
         ttk.Label(curves,text='4999 = all; only the first layout is shown.',foreground='#135b81').grid(row=3,column=0,columnspan=2,sticky='w',padx=6)
-        ttk.Label(content,text='Larger bins give wider bars and fewer bins. Bar width fraction only changes gaps. Smooth connections add no measurements and do not change p-values.',wraplength=900,foreground='#135b81').pack(anchor='w')
+        ttk.Label(content,text='Larger bins give wider bars and fewer bins. Bar width fraction adjusts the gaps. Smooth curves connect saved measurements; tests use the original grid.',wraplength=900,foreground='#135b81').pack(anchor='w')
         layout=tabs[1].body
         def entry(parent,row,label,key,column=0,width=13):
             ttk.Label(parent,text=label).grid(row=row,column=column,sticky='w',padx=7,pady=7)
@@ -316,12 +317,55 @@ class PlotSettingsDialog(tk.Toplevel):
                 var.set(value)
         self.density.set(defaults['show_density_curve']);self.enable_fields()
 
+    def apply_reference_style(self):
+        try:settings=reference_style(self.value())
+        except (ValueError,TypeError,OverflowError) as e:messagebox.showerror('Check plot settings',error_message(e),parent=self);return
+        for key,var in self.variables.items():var.set(str(settings[key]))
+        for key,(var,mapping) in self.enums.items():var.set(next(k for k,v in mapping.items() if v==settings[key]))
+        self.style.set(next(k for k,v in self.STYLES.items() if v==settings['curve_style']))
+        self.custom_margins.set(settings['custom_margins']);self.legend_frame.set(settings['legend_frame'])
+        for role,options in self.series_variables.items():
+            for key,var in options.items():
+                value=settings['series_options'][role][key]
+                if key=='linestyle':value=next(k for k,v in self.LINES.items() if v==value)
+                var.set(value)
+        self.density.set(settings['show_density_curve']);self.enable_fields()
+
     def accept(self,redraw=False):
         try:settings=self.value();dump(self.case/'plot_settings.json',settings)
         except (ValueError,TypeError,OverflowError,OSError) as e:messagebox.showerror('Check plot settings',error_message(e),parent=self);return
         self.grab_release();self.destroy()
         if self.on_saved:self.on_saved()
         if redraw and self.on_redraw:self.on_redraw()
+
+
+class SampleIdentityDialog(tk.Toplevel):
+    def __init__(self,parent,cases,names,callback):
+        super().__init__(parent);self.cases=Path(cases);self.callback=callback
+        self.title('Independent sample IDs');fit_window(self,760,650)
+        folder=self.cases/'汇总报告';self.path=folder/'sample_identity.json'
+        self.data=load(self.path) if self.path.exists() else dict(schema_version=1,cases={})
+        footer=ttk.Frame(self,padding=10);footer.pack(side='bottom',fill='x')
+        panel=ScrollPanel(self,padding=16);panel.pack(fill='both',expand=True)
+        ttk.Label(panel.body,text='Assign a sample ID to each selected case. Images from the same independent sample must share an ID; distinct IDs mean independent samples. Blank IDs disable sample-level confidence intervals for the selection.',wraplength=680).pack(anchor='w',pady=(0,12))
+        self.rows=[]
+        for name in names:
+            case=self.cases/name;meta=load(case/'case.json');prior=self.data.get('cases',{}).get(meta['case_id'],{})
+            value=prior.get('sample_id','') if prior.get('source_sha256')==meta.get('source_sha256') else ''
+            row=ttk.Frame(panel.body);row.pack(fill='x',pady=4);ttk.Label(row,text=name,width=35).pack(side='left');var=tk.StringVar(value=value);ttk.Entry(row,textvariable=var,width=32).pack(side='left');self.rows.append((meta,var))
+        ttk.Button(footer,text='Cancel',command=self.destroy).pack(side='right',padx=8)
+        ttk.Button(footer,text='Save sample IDs',command=self.accept).pack(side='right')
+        self.transient(parent);self.grab_set()
+    def accept(self):
+        entries=self.data.setdefault('cases',{})
+        for meta,var in self.rows:
+            value=var.get().strip()
+            if len(value)>120:messagebox.showerror('Check sample IDs','Sample IDs must be at most 120 characters.',parent=self);return
+            if value:entries[meta['case_id']]=dict(sample_id=value,source_sha256=meta.get('source_sha256'),declared_at=datetime.now().isoformat())
+            else:entries.pop(meta['case_id'],None)
+        try:dump(self.path,self.data)
+        except OSError as e:messagebox.showerror('Cannot save sample IDs',error_message(e),parent=self);return
+        self.grab_release();self.destroy();self.callback()
 
 
 class App(tk.Tk):
@@ -365,6 +409,9 @@ class App(tk.Tk):
         self.summary_settings_button=ttk.Button(selection,text='Summary plot settings',command=self.edit_summary_settings);self.summary_settings_button.pack(side='left',padx=(0,8))
         self.replot_button=ttk.Button(selection,text='Redraw latest summary',command=self.replot_summary);self.replot_button.pack(side='left',padx=(0,8))
         self.selection_label=tk.StringVar(value='0 cases selected');ttk.Label(selection,textvariable=self.selection_label).pack(side='left')
+        samplebar=ttk.Frame(outer);samplebar.pack(fill='x',pady=(0,5))
+        self.sample_button=ttk.Button(samplebar,text='Set sample IDs for selected cases',command=self.edit_sample_ids);self.sample_button.pack(side='left')
+        ttk.Label(samplebar,text='Required for sample-level grain-size confidence intervals.').pack(side='left',padx=8)
         self.detail=tk.StringVar();ttk.Label(outer,textvariable=self.detail,wraplength=980).pack(anchor='w')
         self.check=ttk.Checkbutton(outer,text='I checked scale, crop, window W and bright/dark outlines, then clicked Save all changes on the review page.',variable=self.confirm)
         self.check.pack(anchor='w',pady=12)
@@ -492,6 +539,12 @@ class App(tk.Tk):
         if not names:messagebox.showinfo('Select cases first','Check the boxes beside the cases to include in the summary.',parent=self);return
         path=self.runtime/'summary_selection.json';dump(path,dict(cases=names))
         self.run(['summarize','--selection',str(path),'--cases-root',str(self.cases)])
+    def edit_sample_ids(self):
+        if self.worker:return
+        names=[key for key in self.tree.get_children() if key in self.checked_cases]
+        if not names:messagebox.showinfo('Select cases first','Check the cases whose independent sample IDs you want to edit.',parent=self);return
+        try:SampleIdentityDialog(self,self.cases,names,lambda:self.say('Sample IDs saved. Re-export or redraw the summary to apply them.'))
+        except (ValueError,OSError,KeyError) as e:messagebox.showerror('Cannot edit sample IDs',error_message(e),parent=self)
     def open_latest_summary(self):
         path=self.cases/'汇总报告'/'latest_summary.json'
         if path.exists():
@@ -518,7 +571,7 @@ class App(tk.Tk):
     def run(self,args):
         if self.worker:return
         self.failed=False;self.job=None;self.progress.start(12)
-        for b in [self.import_button,self.report_button,self.plot_button,self.summary_button,self.summary_settings_button,self.replot_button,self.enhance_button]:b.configure(state='disabled')
+        for b in [self.import_button,self.report_button,self.plot_button,self.summary_button,self.summary_settings_button,self.replot_button,self.enhance_button,self.sample_button]:b.configure(state='disabled')
         self.cancel_button.configure(state='normal' if args[0] in ['analyze','analyze-batch','summarize','replot-summary','enhance-bright'] else 'disabled')
         env=dict(os.environ);env['BSE_COMPUTE_BACKEND']={'Auto (prefer GPU)':'auto','CPU only':'cpu','Prefer GPU (CPU fallback)':'gpu'}[self.backend.get()]
         self.worker=subprocess.Popen(process_command('engine',*args),cwd=ROOT,env=env,creationflags=HIDDEN,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,encoding='utf-8',errors='replace')
@@ -537,7 +590,7 @@ class App(tk.Tk):
             if e.get('job'):self.job=Path(e['job'])
             if kind=='exit':
                 self.worker=None;self.job=None;self.progress.stop()
-                for b in [self.import_button,self.report_button,self.plot_button,self.summary_button,self.summary_settings_button,self.replot_button,self.enhance_button]:b.configure(state='normal')
+                for b in [self.import_button,self.report_button,self.plot_button,self.summary_button,self.summary_settings_button,self.replot_button,self.enhance_button,self.sample_button]:b.configure(state='normal')
                 self.cancel_button.configure(state='disabled');self.refresh()
                 if e['code'] and not self.failed:self.say('Calculation did not finish. Check the messages below or the error log in the case logs folder.')
                 if self.stopping:self.finish_close();return
